@@ -43,6 +43,8 @@ from ui.settings.theme import BUTTON_BUSY, BUTTON_NORMAL
 from ui.panels.training_options import (
     NO_REFERENCE_LABEL,
     NO_RESUME_LABEL,
+    REFERENCE_TYPE_INITIAL_WEIGHTS,
+    REFERENCE_TYPE_OPTIONS,
     build_training_reference_options,
     build_training_resume_options,
     default_enemy_type_for_algorithm,
@@ -71,6 +73,7 @@ class TrainingPanel:
         self._set_output(self._default_output())
         self.output.trace_add("write", self._mark_custom_output)
         self.reference_model = tk.StringVar(value=NO_REFERENCE_LABEL)
+        self.reference_type = tk.StringVar(value=REFERENCE_TYPE_INITIAL_WEIGHTS)
         self.resume_run = tk.StringVar(value=NO_RESUME_LABEL)
         self.reference_options: dict[str, Path | None] = {}
         self.resume_options: dict[str, dict[str, Any] | None] = {}
@@ -150,10 +153,24 @@ class TrainingPanel:
         ttk.Entry(training, textvariable=self.seed).grid(row=2, column=3, sticky="ew", pady=7, ipady=2)
 
         ttk.Label(training, text="参考模型").grid(row=3, column=0, sticky="w", padx=(0, 10), pady=7)
-        self.reference_select_host = ttk.Frame(training, style="Panel.TFrame", height=FIELD_ROW_HEIGHT - 14)
+        reference_row = ttk.Frame(training, style="Panel.TFrame", height=FIELD_ROW_HEIGHT - 14)
+        lock_widget_size(reference_row, height=FIELD_ROW_HEIGHT - 14)
+        reference_row.grid(row=3, column=1, columnspan=3, sticky="ew", pady=7)
+        reference_row.columnconfigure(0, weight=7)
+        reference_row.columnconfigure(1, weight=0)
+        reference_row.columnconfigure(2, weight=3)
+        reference_row.rowconfigure(0, weight=1, minsize=FIELD_ROW_HEIGHT - 14)
+
+        self.reference_select_host = ttk.Frame(reference_row, style="Panel.TFrame", height=FIELD_ROW_HEIGHT - 14)
         lock_widget_size(self.reference_select_host, height=FIELD_ROW_HEIGHT - 14)
-        self.reference_select_host.grid(row=3, column=1, columnspan=3, sticky="ew", pady=7)
+        self.reference_select_host.grid(row=0, column=0, sticky="ew")
         self.reference_select_host.columnconfigure(0, weight=1)
+        ttk.Label(reference_row, text="参考类型").grid(row=0, column=1, sticky="w", padx=(16, 10))
+        create_select(
+            reference_row,
+            self.reference_type,
+            REFERENCE_TYPE_OPTIONS,
+        ).grid(row=0, column=2, sticky="ew")
 
         ttk.Label(training, text="继续训练").grid(row=4, column=0, sticky="w", padx=(0, 10), pady=7)
         self.resume_select_host = ttk.Frame(training, style="Panel.TFrame", height=FIELD_ROW_HEIGHT - 14)

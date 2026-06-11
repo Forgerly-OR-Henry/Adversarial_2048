@@ -47,6 +47,8 @@ from ui.panels.evaluation_options import (
 )
 from ui.panels.training_platform import build_training_artifact_labels
 from ui.panels.training_options import (
+    REFERENCE_TYPE_INITIAL_WEIGHTS,
+    REFERENCE_TYPE_OPTIONS,
     build_training_reference_options,
     build_training_resume_options,
     default_training_output_directory,
@@ -129,6 +131,9 @@ class TrainingPlatformTest(unittest.TestCase):
                     training_output_model_path("player_dqn", Path(temp_dir) / "player_dqn_model.pt")
                 with self.assertRaises(ValueError):
                     training_output_model_path("player_q", runs_root / "latest")
+
+    def test_reference_type_extension_only_enables_initial_weights(self):
+        self.assertEqual(REFERENCE_TYPE_OPTIONS, (REFERENCE_TYPE_INITIAL_WEIGHTS,))
 
     def test_gui_single_evaluation_output_field_is_directory_only(self):
         output_directory = default_single_evaluation_output_directory("q_ai", "random")

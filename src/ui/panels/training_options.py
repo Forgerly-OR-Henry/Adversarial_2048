@@ -20,6 +20,9 @@ from ui.settings.options import TRAINING_TYPE_LABELS
 
 NO_REFERENCE_LABEL = "不使用参考模型"
 NO_RESUME_LABEL = "不继续训练"
+REFERENCE_TYPE_INITIAL_WEIGHTS = "起始权重"
+# REFERENCE_TYPE_DISTILLATION = "蒸馏"  # 预留扩展：蒸馏训练实现后再启用。
+REFERENCE_TYPE_OPTIONS = (REFERENCE_TYPE_INITIAL_WEIGHTS,)
 
 TRAIN_DEFAULTS = {
     "player_q": get_train_defaults("player_q"),
