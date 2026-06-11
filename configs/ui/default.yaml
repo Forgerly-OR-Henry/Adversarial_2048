@@ -1,0 +1,26 @@
+# GUI 启动时默认玩家 / Default player when GUI starts
+player: human
+# GUI 启动时默认敌人 / Default enemy when GUI starts
+enemy: random
+
+# GUI 单项评估平台默认值 / Defaults for the GUI single-model evaluation panel
+experiment:
+  # 默认评估玩家 / Default evaluation player
+  player: heuristic
+  # 默认评估局数 / Default evaluation episode count
+  episodes: 100
+  # 默认随机种子，空字符串表示留空 / Default seed; empty string means blank
+  seed: ""
+  # 默认输出目录，空字符串表示自动生成 / Default output directory; empty string means auto-generated
+  output: ""
+
+# GUI 模型训练面板默认值 / Defaults for the GUI training panel
+training:
+  # 默认训练对象：player 或 enemy / Default training target: player or enemy
+  target: player
+  # 默认训练算法：dqn 或 q_learning / Default training algorithm: dqn or q_learning
+  algorithm: q_learning
+  # 默认训练局数 / Default training episode count
+  episodes: 300
+  # 默认随机种子，空字符串表示留空 / Default seed; empty string means blank
+  seed: ""

@@ -1,0 +1,42 @@
+HELP.md
+# Generated training artifacts. Keep only directory placeholders.
+models/**
+!models/
+!models/.gitkeep
+!models/dqn/
+!models/dqn/.gitkeep
+!models/dqn/player/
+!models/dqn/player/.gitkeep
+!models/dqn/enemy/
+!models/dqn/enemy/.gitkeep
+!models/q_learning/
+!models/q_learning/.gitkeep
+!models/q_learning/player/
+!models/q_learning/player/.gitkeep
+!models/q_learning/enemy/
+!models/q_learning/enemy/.gitkeep
+
+# Generated evaluation outputs. Keep only directory placeholders.
+outputs/**
+!outputs/
+!outputs/.gitkeep
+!outputs/experiments/
+!outputs/experiments/.gitkeep
+
+# Runtime logs. Keep only directory placeholders.
+logs/**
+!logs/
+!logs/.gitkeep
+!logs/errors/
+!logs/errors/.gitkeep
+.venv/
+__pycache__/
+*.pyc
+
+### IntelliJ IDEA ###
+*.iws
+*.iml
+*.ipr
+
+### VS Code ###
+.vscode/

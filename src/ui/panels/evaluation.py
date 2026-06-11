@@ -1,0 +1,438 @@
+"""单项模型评估面板和后台评估任务。 / Single-model evaluation panel and background evaluation tasks."""
+
+from __future__ import annotations
+
+import threading
+import tkinter as tk
+from pathlib import Path
+from queue import Empty, Queue
+from tkinter import ttk
+from typing import Any
+
+from evaluation import run_experiment
+from ui.components.controls import create_action_button, create_message_area, create_select, create_stepper, set_button_visual
+from ui.settings.layout import (
+    BUTTON_BAR_HEIGHT,
+    FIELD_ROW_HEIGHT,
+    FORM_FIELD_WIDTH,
+    FORM_HEIGHT,
+    FORM_LABEL_WIDTH,
+    FORM_SECOND_FIELD_WIDTH,
+    FORM_SECOND_LABEL_WIDTH,
+    FORM_WIDTH,
+    RUN_ACTION_BUTTON_WIDTH,
+    RUN_ACTION_GAP,
+    RUN_ACTION_PROGRESS_WIDTH,
+    RUN_ACTION_ROW_WIDTH,
+    lock_widget_size,
+)
+from ui.settings.options import (
+    ENEMY_LABELS,
+    PLAYER_LABELS,
+)
+from ui.settings.theme import BUTTON_BUSY, BUTTON_NORMAL
+from ui.panels.evaluation_options import (
+    EVALUATION_TARGET_LABELS,
+    EVALUATION_TARGETS_BY_LABEL,
+    NO_MODEL_LABEL,
+    EvaluationModelOption,
+    SingleEvaluationRequest,
+    build_automatic_enemy_options,
+    build_automatic_player_options,
+    build_evaluation_model_options,
+    default_evaluation_pair_for_empty_selection,
+    default_single_evaluation_output_directory,
+    resolve_single_evaluation_request,
+    single_evaluation_output_csv_path,
+    training_type_evaluation_type,
+    training_type_role,
+)
+from utils.training_log import log_error
+
+PREVIEW_REFRESH_MS = 5000
+
+
+class EvaluationPanel:
+    """单项评估平台的界面状态和后台任务控制器。 / UI state and background-task controller for single evaluation."""
+    def __init__(self, app: Any, parent: ttk.Frame, defaults: dict[str, Any], enemy_type: str):
+        self.app = app
+        self.target_type = tk.StringVar(value=EVALUATION_TARGET_LABELS["auto_player"])
+        self.fixed_player_type = tk.StringVar(value=PLAYER_LABELS[defaults["player"]])
+        self.fixed_enemy_type = tk.StringVar(value=ENEMY_LABELS[enemy_type])
+        self.opponent_type = tk.StringVar(value=self.fixed_enemy_type.get())
+        self.opponent_label = tk.StringVar(value="固定敌人")
+        self.model_label = tk.StringVar(value="模型成果")
+        self.model_artifact = tk.StringVar(value=NO_MODEL_LABEL)
+        self.model_options: dict[str, EvaluationModelOption] = {}
+        self.model_select: tk.Frame | None = None
+        self.opponent_select: tk.Frame | None = None
+        self.episodes = tk.IntVar(value=defaults["episodes"])
+        self.seed = tk.StringVar(value=defaults["seed"] or "")
+        configured_output = defaults["output"] or ""
+        self._auto_output = not bool(configured_output)
+        self._updating_output = False
+        self.output = tk.StringVar(value=configured_output)
+        if self._auto_output:
+            self._set_output(self._default_output())
+        self.output.trace_add("write", self._mark_custom_output)
+        self.status = tk.StringVar(value="已准备好运行实验。")
+        self.progress = tk.IntVar(value=0)
+        self.running = False
+        self.queue: Queue[tuple[str, object]] = Queue()
+        self.latest_preview: tuple[list[list[int]], int, int, int] | None = None
+
+        self._build(parent)
+        self.refresh_model_options()
+
+    def _build(self, parent: ttk.Frame) -> None:
+        experiment = ttk.LabelFrame(parent, text="单项评估平台设置", width=FORM_WIDTH, height=FORM_HEIGHT, padding=16)
+        lock_widget_size(experiment, width=FORM_WIDTH, height=FORM_HEIGHT)
+        experiment.grid(row=0, column=0, sticky="nsew")
+        experiment.columnconfigure(0, weight=0, minsize=FORM_LABEL_WIDTH)
+        experiment.columnconfigure(1, weight=0, minsize=FORM_FIELD_WIDTH)
+        experiment.columnconfigure(2, weight=0, minsize=FORM_SECOND_LABEL_WIDTH)
+        experiment.columnconfigure(3, weight=0, minsize=FORM_SECOND_FIELD_WIDTH)
+        for row in range(4):
+            experiment.rowconfigure(row, weight=0, minsize=FIELD_ROW_HEIGHT)
+        experiment.rowconfigure(4, weight=0, minsize=BUTTON_BAR_HEIGHT + 16)
+        experiment.rowconfigure(5, weight=0, minsize=100)
+
+        ttk.Label(experiment, text="评估对象").grid(row=0, column=0, sticky="w", padx=(0, 10), pady=7)
+        create_select(
+            experiment,
+            self.target_type,
+            tuple(EVALUATION_TARGET_LABELS.values()),
+            command=lambda _: self.refresh_model_options(),
+        ).grid(row=0, column=1, sticky="ew", pady=7)
+
+        ttk.Label(experiment, textvariable=self.opponent_label).grid(row=0, column=2, sticky="w", padx=(16, 10), pady=7)
+        self.opponent_select_host = ttk.Frame(experiment, style="Panel.TFrame", height=FIELD_ROW_HEIGHT - 14)
+        lock_widget_size(self.opponent_select_host, height=FIELD_ROW_HEIGHT - 14)
+        self.opponent_select_host.grid(row=0, column=3, sticky="ew", pady=7)
+        self.opponent_select_host.columnconfigure(0, weight=1)
+
+        ttk.Label(experiment, textvariable=self.model_label).grid(row=1, column=0, sticky="w", padx=(0, 10), pady=7)
+        self.model_select_host = ttk.Frame(experiment, style="Panel.TFrame", height=FIELD_ROW_HEIGHT - 14)
+        lock_widget_size(self.model_select_host, height=FIELD_ROW_HEIGHT - 14)
+        self.model_select_host.grid(row=1, column=1, columnspan=3, sticky="ew", pady=7)
+        self.model_select_host.columnconfigure(0, weight=1)
+        self.model_select_host.columnconfigure(1, weight=0, minsize=92)
+
+        refresh_button = create_action_button(
+            self.model_select_host,
+            text="刷新",
+            command=self.refresh_model_options,
+            compact=True,
+        )
+        refresh_button.configure(width=6)
+        refresh_button.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
+
+        ttk.Label(experiment, text="局数").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=7)
+        create_stepper(
+            experiment,
+            self.episodes,
+            from_=1,
+            to=100000,
+            width=10,
+        ).grid(
+            row=2,
+            column=1,
+            sticky="ew",
+            pady=7,
+        )
+
+        ttk.Label(experiment, text="随机种子").grid(row=2, column=2, sticky="w", padx=(16, 10), pady=7)
+        ttk.Entry(experiment, textvariable=self.seed).grid(row=2, column=3, sticky="ew", pady=7, ipady=2)
+
+        ttk.Label(experiment, text="输出目录").grid(row=3, column=0, sticky="w", padx=(0, 10), pady=7)
+        ttk.Entry(experiment, textvariable=self.output).grid(
+            row=3,
+            column=1,
+            columnspan=3,
+            sticky="ew",
+            pady=7,
+            ipady=2,
+        )
+
+        action_row = ttk.Frame(experiment, style="Panel.TFrame", width=RUN_ACTION_ROW_WIDTH, height=BUTTON_BAR_HEIGHT)
+        lock_widget_size(action_row, width=RUN_ACTION_ROW_WIDTH, height=BUTTON_BAR_HEIGHT)
+        action_row.grid(row=4, column=0, columnspan=4, sticky="w", pady=(14, 0))
+        action_row.columnconfigure(0, weight=0, minsize=RUN_ACTION_BUTTON_WIDTH)
+        action_row.columnconfigure(1, weight=0, minsize=RUN_ACTION_GAP)
+        action_row.columnconfigure(2, weight=0, minsize=RUN_ACTION_PROGRESS_WIDTH)
+        action_row.rowconfigure(0, weight=0, minsize=BUTTON_BAR_HEIGHT)
+
+        self.button = create_action_button(action_row, text="运行单项评估", command=self.start)
+        self.button.grid(row=0, column=0, sticky="nsew")
+        self.progress_bar = ttk.Progressbar(
+            action_row,
+            variable=self.progress,
+            maximum=100,
+            mode="determinate",
+        )
+        self.progress_bar.grid(row=0, column=2, sticky="ew")
+        create_message_area(experiment, self.status).grid(
+            row=5,
+            column=0,
+            columnspan=4,
+            sticky="ew",
+            pady=(12, 0),
+        )
+
+    def start(self) -> None:
+        if self.running:
+            return
+
+        try:
+            episodes = int(self.episodes.get())
+        except (TypeError, ValueError, tk.TclError):
+            self.status.set("局数必须是正整数。")
+            return
+        if episodes < 1:
+            self.status.set("局数至少为 1。")
+            return
+
+        seed_text = self.seed.get().strip()
+        if seed_text:
+            try:
+                seed: int | None = int(seed_text)
+            except ValueError:
+                self.status.set("随机种子必须留空或填写整数。")
+                return
+        else:
+            seed = None
+
+        selected_model = self._selected_model_option()
+        if selected_model is None:
+            self.status.set("请先选择一个可用的训练模型。")
+            return
+        try:
+            request = resolve_single_evaluation_request(selected_model, self.opponent_type.get())
+        except KeyError:
+            self.status.set("固定对手必须是完整算法或可默认加载的模型。")
+            return
+
+        output_directory = self.output.get().strip() or self._default_output()
+        try:
+            output_path = single_evaluation_output_csv_path(
+                request.player_type,
+                request.enemy_type,
+                output_directory,
+            )
+        except ValueError as exc:
+            self.status.set(str(exc))
+            return
+
+        self.running = True
+        self.progress.set(0)
+        self._refresh_button()
+        self.status.set(f"正在运行 {episodes} 局实验...")
+        self.latest_preview = None
+
+        # Tkinter 只能在主线程更新界面，后台线程把结果放进 queue 后由 after 轮询消费。
+        # Tkinter UI updates must stay on the main thread; the worker posts results into a queued poll.
+        worker = threading.Thread(
+            target=self._worker,
+            args=(request, episodes, seed, output_path),
+            daemon=True,
+        )
+        worker.start()
+        self.app.root.after(100, self._poll_queue)
+        self.app.root.after(PREVIEW_REFRESH_MS, self._refresh_preview)
+
+    def _worker(
+        self,
+        request: SingleEvaluationRequest,
+        episodes: int,
+        seed: int | None,
+        output: Path,
+    ) -> None:
+        try:
+            output_path = run_experiment(
+                player_type=request.player_type,
+                enemy_type=request.enemy_type,
+                episodes=episodes,
+                seed=seed,
+                output=output,
+                player_model_path=request.player_model_path,
+                enemy_model_path=request.enemy_model_path,
+                progress_callback=lambda current, total, record: self.queue.put(
+                    ("progress", (current, total, record))
+                ),
+                state_callback=lambda current, total, record, state: self.queue.put(
+                    (
+                        "preview",
+                        ([row[:] for row in state.board], state.score, state.steps, state.max_tile),
+                    )
+                ),
+            )
+        except Exception as exc:  # pragma: no cover - surfaced through the GUI.
+            log_error(
+                "gui_experiment_worker",
+                exc,
+                {
+                    "player_type": request.player_type,
+                    "enemy_type": request.enemy_type,
+                    "episodes": episodes,
+                    "seed": seed,
+                    "output": output,
+                    "player_model_path": request.player_model_path,
+                    "enemy_model_path": request.enemy_model_path,
+                },
+            )
+            self.queue.put(("error", str(exc)))
+            return
+        self.queue.put(("done", str(output_path)))
+
+    def _poll_queue(self) -> None:
+        while True:
+            try:
+                event, payload = self.queue.get_nowait()
+            except Empty:
+                break
+
+            if event == "progress":
+                current, total, record = payload
+                self.progress.set(int(current * 100 / total))
+                self.status.set(
+                    f"{current}/{total} | 最大块 {record.max_tile} | 分数 {record.score} | 步数 {record.steps}"
+                )
+            elif event == "done":
+                self.running = False
+                self._refresh_button()
+                self.progress.set(100)
+                self._render_latest_preview()
+                if self._auto_output:
+                    self.refresh_output()
+                self.status.set(f"结果已保存到 {payload}")
+            elif event == "error":
+                self.running = False
+                self._refresh_button()
+                self.status.set(f"实验失败：{payload}")
+            elif event == "preview":
+                self.latest_preview = payload
+
+        if self.running:
+            self.app.root.after(100, self._poll_queue)
+
+    def _refresh_preview(self) -> None:
+        if not self.running:
+            return
+        self._render_latest_preview()
+        self.app.root.after(PREVIEW_REFRESH_MS, self._refresh_preview)
+
+    def _render_latest_preview(self) -> None:
+        if self.latest_preview is None:
+            return
+        board, score, steps, max_tile = self.latest_preview
+        self.app.render_preview(board, score, steps, max_tile, "评估")
+
+    def _refresh_button(self) -> None:
+        if self.running:
+            self.button.configure(text="评估运行中...", state=tk.DISABLED)
+            set_button_visual(self.button, BUTTON_BUSY)
+        else:
+            self.button.configure(text="运行单项评估", state=tk.NORMAL)
+            set_button_visual(self.button, BUTTON_NORMAL)
+
+    def refresh_model_options(self) -> None:
+        role = EVALUATION_TARGETS_BY_LABEL[self.target_type.get()]
+        self._sync_opponent_select(role)
+        if role == "auto_player":
+            self.model_label.set("玩家模型")
+            options = build_automatic_player_options()
+        elif role == "auto_enemy":
+            self.model_label.set("敌人模型")
+            options = build_automatic_enemy_options()
+        else:
+            self.model_label.set("模型成果")
+            options = [option for option in build_evaluation_model_options() if option.role == role]
+        self.model_options = {option.label: option for option in options}
+        labels = tuple(self.model_options) or (NO_MODEL_LABEL,)
+        if self.model_artifact.get() not in labels:
+            self.model_artifact.set(labels[0])
+        if self.model_select is not None:
+            self.model_select.destroy()
+        self.model_select = create_select(
+            self.model_select_host,
+            self.model_artifact,
+            labels,
+            command=lambda _: self.refresh_output(),
+        )
+        self.model_select.grid(row=0, column=0, sticky="ew")
+        self.refresh_output()
+
+    def _sync_opponent_select(self, role: str) -> None:
+        if role in ("player", "auto_player"):
+            self.opponent_label.set("固定敌人")
+            self.opponent_type.set(self.fixed_enemy_type.get())
+            values = tuple(ENEMY_LABELS.values())
+            command = self._set_fixed_enemy
+        else:
+            self.opponent_label.set("固定玩家")
+            self.opponent_type.set(self.fixed_player_type.get())
+            values = tuple(PLAYER_LABELS.values())
+            command = self._set_fixed_player
+
+        if self.opponent_select is not None:
+            self.opponent_select.destroy()
+        self.opponent_select = create_select(
+            self.opponent_select_host,
+            self.opponent_type,
+            values,
+            command=command,
+        )
+        self.opponent_select.grid(row=0, column=0, sticky="ew")
+
+    def _set_fixed_enemy(self, value: str) -> None:
+        self.fixed_enemy_type.set(value)
+        self.refresh_output()
+
+    def _set_fixed_player(self, value: str) -> None:
+        self.fixed_player_type.set(value)
+        self.refresh_output()
+
+    def refresh_output(self) -> None:
+        if self._auto_output:
+            self._set_output(self._default_output())
+
+    def _default_output(self) -> str:
+        selected_model = self._selected_model_option()
+        if selected_model is None:
+            role = EVALUATION_TARGETS_BY_LABEL[self.target_type.get()]
+            player_type, enemy_type = default_evaluation_pair_for_empty_selection(role, self.opponent_type.get())
+            return str(default_single_evaluation_output_directory(player_type, enemy_type))
+        request = resolve_single_evaluation_request(selected_model, self.opponent_type.get())
+        player_type = request.player_type
+        enemy_type = request.enemy_type
+        return str(default_single_evaluation_output_directory(player_type, enemy_type))
+
+    def _selected_model_option(self) -> EvaluationModelOption | None:
+        return self.model_options.get(self.model_artifact.get())
+
+    def _set_output(self, value: str) -> None:
+        self._updating_output = True
+        try:
+            self.output.set(value)
+        finally:
+            self._updating_output = False
+
+    def _mark_custom_output(self, *_args: object) -> None:
+        if not self._updating_output:
+            self._auto_output = False
+
+
+def build_evaluation_panel(app: Any, parent: ttk.Frame) -> EvaluationPanel:
+    """创建单项评估面板。 / Build the single-evaluation panel."""
+    return EvaluationPanel(app, parent, app.ui_defaults["experiment"], app.initial_enemy_type)
+
+
+__all__ = [
+    "EvaluationPanel",
+    "build_automatic_enemy_options",
+    "build_automatic_player_options",
+    "build_evaluation_panel",
+    "default_evaluation_pair_for_empty_selection",
+    "default_single_evaluation_output_directory",
+    "single_evaluation_output_csv_path",
+]

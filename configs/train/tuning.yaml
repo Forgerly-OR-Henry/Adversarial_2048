@@ -1,0 +1,12 @@
+# 自动调参候选数量 / Number of auto-tuning candidates
+candidates: 3
+# 每组候选短训练局数 / Short training episodes per candidate
+training_episodes: 50
+# 每组候选评估局数 / Evaluation episodes per candidate
+evaluation_episodes: 30
+# 随机种子，留空表示每次随机 / Random seed; leave empty for non-fixed runs
+seed:
+# 玩家模型调参时默认评估敌人 / Default evaluation enemy for player tuning
+player_evaluation_enemy: random
+# 敌对模型调参时默认固定玩家 / Default fixed player for enemy tuning
+enemy_evaluation_player: heuristic

@@ -1,0 +1,20 @@
+# 训练局数 / Number of training episodes
+episodes: 300
+# 训练敌人时使用的固定玩家 / Fixed player used while training the enemy
+player: heuristic
+# 随机种子，留空表示每次随机 / Random seed; leave empty for non-fixed runs
+seed:
+# 历史训练成果目录 / Historical training artifact directory
+runs_directory: models/q_learning/enemy
+# 当前默认加载的最新模型目录 / Latest model directory loaded by default
+latest_output_directory: models/q_learning/enemy/latest
+# Q-learning 学习率 / Q-learning learning rate
+learning_rate: 0.03
+# 折扣因子，越高越重视长期回报 / Discount factor; higher values favor long-term rewards
+gamma: 0.90
+# 初始探索率 / Initial exploration rate
+epsilon_start: 0.8
+# 最终探索率 / Final exploration rate
+epsilon_end: 0.05
+# 单局最大步数 / Max steps per episode
+max_steps: 10000

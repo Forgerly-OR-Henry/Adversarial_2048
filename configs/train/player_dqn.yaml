@@ -1,0 +1,67 @@
+# 训练局数 / Number of training episodes
+episodes: 300
+# 训练玩家时使用的对手敌人 / Enemy used while training the player
+enemy: random
+# 随机种子，留空表示每次随机 / Random seed; leave empty for non-fixed runs
+seed:
+# 历史训练成果目录 / Historical training artifact directory
+runs_directory: models/dqn/player
+# 当前默认加载的最新模型目录 / Latest model directory loaded by default
+latest_output_directory: models/dqn/player/latest
+# DQN 优化器学习率 / DQN optimizer learning rate
+learning_rate: 0.0003
+# 折扣因子，越高越重视长期回报 / Discount factor; higher values favor long-term rewards
+gamma: 0.95
+# 初始探索率 / Initial exploration rate
+epsilon_start: 0.9
+# 最终探索率 / Final exploration rate
+epsilon_end: 0.05
+# 每次梯度更新的样本数 / Number of samples per gradient update
+batch_size: 64
+# 经验回放池容量 / Replay buffer capacity
+replay_capacity: 50000
+# 开始训练前需要积累的最小经验数 / Minimum replay size before training starts
+min_replay_size: 1000
+# 目标网络同步间隔，单位为 episode / Target network sync interval in episodes
+target_update_interval: 20
+# 单局最大步数 / Max steps per episode
+max_steps: 10000
+# 训练设备，留空表示自动选择 cuda 或 cpu / Training device; leave empty to auto-select cuda or cpu
+device:
+
+# 自增长稳定控制 / Self-growth stability controls
+stability:
+  # 是否启用自动调参、最佳模型保存和退化回退 / Enable auto-tuning, best checkpoints, and rollback
+  enabled: true
+  # 每多少局检查一次最近表现 / Episodes between stability evaluations
+  eval_interval: 20
+  # 用最近多少局的均值判断进退步 / Moving average window for stability decisions
+  eval_window: 20
+  # 判定为明显进步所需的相对提升 / Relative improvement needed before saving a new best model
+  improve_tolerance: 0.01
+  # 相比历史最佳下降多少视为退化 / Relative drop from best before slowing training
+  drop_tolerance: 0.20
+  # 连续退化多少次后回滚到最佳模型 / Consecutive bad evaluations before rollback
+  bad_eval_patience: 2
+  # 学习率边界 / Learning-rate bounds
+  min_learning_rate: 0.00001
+  max_learning_rate: 0.0003
+  # 退化时学习率衰减倍数 / Learning-rate decay on degradation
+  lr_decay: 0.5
+  # 探索率边界 / Exploration-rate bounds
+  min_epsilon: 0.05
+  max_epsilon: 1.0
+  # 进步时逐步减少探索 / Exploration decay on improvement
+  epsilon_decay_on_improve: 0.98
+  # 退化时恢复部分探索 / Exploration boost on degradation
+  epsilon_boost_on_drop: 1.2
+  # 梯度裁剪阈值，防止训练震荡 / Gradient clipping norm
+  max_grad_norm: 1.0
+  # 滚动 checkpoint 间隔 / Rolling checkpoint interval
+  checkpoint_interval: 50
+  # 保存历史最佳模型 / Save best checkpoint
+  keep_best_model: true
+  # 连续退化后自动回滚 / Roll back after repeated degradation
+  rollback_on_drop: true
+  # 训练结束时将输出模型恢复为最佳模型 / Save best model as final output
+  restore_best_on_finish: true

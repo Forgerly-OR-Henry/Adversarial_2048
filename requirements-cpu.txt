@@ -1,0 +1,7 @@
+# CPU-only fallback environment.
+# Use this on machines without an NVIDIA GPU or compatible driver.
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
+torch
+numpy
+PyYAML

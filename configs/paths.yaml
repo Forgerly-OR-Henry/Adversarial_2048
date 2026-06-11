@@ -1,0 +1,22 @@
+# 共享路径配置 / Shared path settings
+models:
+  # 玩家 Q-learning 模型目录 / Player Q-learning model directory
+  q_learning_player: models/q_learning/player/latest
+  # 敌人 Q-learning 模型目录 / Enemy Q-learning model directory
+  q_learning_enemy: models/q_learning/enemy/latest
+  # 玩家 DQN 权重目录 / Player DQN weights directory
+  dqn_player: models/dqn/player/latest
+  # 敌人 DQN 权重目录 / Enemy DQN weights directory
+  dqn_enemy: models/dqn/enemy/latest
+
+# 正式输出配置 / Formal output settings
+outputs:
+  # 单项评估 CSV 默认保存目录 / Default directory for single-model evaluation CSV files
+  experiments_directory: outputs/experiments
+
+# 日志输出配置 / Log output settings
+logs:
+  # 系统日志根目录 / System log root directory
+  directory: logs
+  # 异常与错误日志目录 / Error log directory
+  errors_directory: logs/errors

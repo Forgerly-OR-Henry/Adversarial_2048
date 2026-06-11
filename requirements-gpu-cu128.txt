@@ -1,0 +1,9 @@
+# NVIDIA GPU training dependencies, same PyTorch target as requirements.txt.
+#
+# This installs the CUDA 12.8 PyTorch wheel from the official PyTorch index.
+# Use it on machines with an NVIDIA GPU and a recent enough NVIDIA driver.
+--index-url https://download.pytorch.org/whl/cu128
+--extra-index-url https://pypi.org/simple
+torch==2.11.0+cu128
+numpy
+PyYAML
