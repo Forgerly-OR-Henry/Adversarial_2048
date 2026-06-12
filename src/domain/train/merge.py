@@ -1,4 +1,4 @@
-"""Q-learning 训练产物合并和发布。 / Q-learning training artifact merging and publishing."""
+"""训练产物合并和发布。 / Training artifact merging and publishing."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from domain.models.torch_utils import load_torch_checkpoint, require_torch
 
 @dataclass(frozen=True)
 class MergeSummary:
-    """Q-learning 模型合并后的结果摘要。 / Result summary after merging Q-learning models."""
+    """模型合并后的结果摘要。 / Result summary after merging models."""
     training_type: str
     output_path: Path
     artifact_a: Path
@@ -32,7 +32,7 @@ def merge_training_artifacts(
     weight_a: float = 0.5,
     publish_latest: bool = False,
 ) -> MergeSummary:
-    """合并两个兼容的 Q-learning 训练产物。 / Merge two compatible Q-learning training artifacts."""
+    """合并两个兼容的训练产物。 / Merge two compatible training artifacts."""
     if not 0.0 <= weight_a <= 1.0:
         raise ValueError("weight_a must be between 0 and 1.")
     info_a = identify_training_artifact(artifact_a)

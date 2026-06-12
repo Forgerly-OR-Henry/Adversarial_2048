@@ -33,7 +33,7 @@ from domain.train.artifacts import (
 )
 from domain.train.merge import merge_training_artifacts
 from domain.train.tuning import generate_tuning_candidates
-from domain.train.train_player_q import train_q_player
+from domain.train.q_learning.player import train_q_player
 from ui.components import GRID_CONTROL_OPTIONS as EXPORTED_GRID_CONTROL_OPTIONS
 from ui.components.controls import GRID_CONTROL_OPTIONS as COMPAT_GRID_CONTROL_OPTIONS
 from ui.components.inputs import GRID_CONTROL_OPTIONS as INPUT_GRID_CONTROL_OPTIONS

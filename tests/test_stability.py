@@ -5,7 +5,7 @@ import unittest
 import tests._path  # noqa: F401
 
 from config import get_train_defaults
-from domain.train.stability import StabilityConfig, StabilityController, stability_config_from_mapping
+from domain.train.dqn.stability import StabilityConfig, StabilityController, stability_config_from_mapping
 
 
 class StabilityControllerTest(unittest.TestCase):

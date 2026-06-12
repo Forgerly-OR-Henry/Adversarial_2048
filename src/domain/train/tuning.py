@@ -8,8 +8,8 @@ from typing import Any
 
 from config import get_train_defaults, get_tuning_defaults
 from domain.evaluation.compare import EvaluationStats, evaluate_training_artifact, identify_training_artifact
-from domain.train.train_enemy_q import train_q_enemy
-from domain.train.train_player_q import train_q_player
+from domain.train.q_learning.enemy import train_q_enemy
+from domain.train.q_learning.player import train_q_player
 
 
 @dataclass(frozen=True)
@@ -143,7 +143,7 @@ def _train_candidate(
             **parameters,
         )
     if target == "player":
-        from domain.train.train_player_dqn import train_dqn_player
+        from domain.train.dqn.player import train_dqn_player
 
         return train_dqn_player(
             episodes=episodes,
@@ -154,7 +154,7 @@ def _train_candidate(
             publish_latest=False,
             **parameters,
         )
-    from domain.train.train_enemy_dqn import train_dqn_enemy
+    from domain.train.dqn.enemy import train_dqn_enemy
 
     return train_dqn_enemy(
         episodes=episodes,

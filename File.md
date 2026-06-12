@@ -83,15 +83,19 @@ adversarial_2048/
 │   │   ├── train/                    # [已实现/待扩展] 训练脚本目录
 │   │   │   ├── __init__.py           # [已实现] 导出 Q/DQN 训练入口，DQN 按需懒加载
 │   │   │   ├── artifacts.py          # [已实现] 训练产物命名、索引、元数据保存与查询
-│   │   │   ├── merge.py              # [已实现] Q-learning 训练产物合并与发布 latest
-│   │   │   ├── train_player_q.py     # [已实现] Q-learning 玩家训练循环
-│   │   │   ├── train_enemy_q.py      # [已实现] Q-learning 敌人训练循环
-│   │   │   ├── dqn_checkpoints.py    # [已实现] DQN checkpoint 和 state_dict 共享工具
-│   │   │   ├── replay_buffer.py      # [已实现] DQN 经验回放池
-│   │   │   ├── stability.py          # [已实现] DQN 稳定性控制、回滚、学习率调整配置
-│   │   │   ├── train_player_dqn.py   # [已实现] PyTorch DQN 玩家训练循环
-│   │   │   ├── train_enemy_dqn.py    # [已实现] PyTorch DQN 敌人训练循环
-│   │   │   └── tuning.py             # [已实现] 自动短轮调参与候选结果排序
+│   │   │   ├── merge.py              # [已实现] 兼容训练产物合并与发布 latest
+│   │   │   ├── tuning.py             # [已实现] 自动短轮调参与候选结果排序
+│   │   │   ├── q_learning/           # [已实现] Q-learning 训练子包
+│   │   │   │   ├── __init__.py       # [已实现] 导出 Q-learning 训练入口和奖励函数
+│   │   │   │   ├── player.py         # [已实现] Q-learning 玩家训练循环
+│   │   │   │   └── enemy.py          # [已实现] Q-learning 敌人训练循环
+│   │   │   └── dqn/                  # [已实现] DQN 训练子包
+│   │   │       ├── __init__.py       # [已实现] 导出 DQN 训练入口，按需懒加载 Torch
+│   │   │       ├── checkpoints.py    # [已实现] DQN checkpoint 和 state_dict 共享工具
+│   │   │       ├── replay_buffer.py  # [已实现] DQN 经验回放池
+│   │   │       ├── stability.py      # [已实现] DQN 稳定性控制、回滚、学习率调整配置
+│   │   │       ├── player.py         # [已实现] PyTorch DQN 玩家训练循环
+│   │   │       └── enemy.py          # [已实现] PyTorch DQN 敌人训练循环
 │   │   ├── evaluation/               # [已实现] 自动对局与实验运行
 │   │   │   ├── __init__.py           # [已实现] 导出 run_episode / run_experiment
 │   │   │   ├── compare.py            # [已实现] 训练产物识别、加载与横向评估比较
@@ -315,13 +319,13 @@ episode,max_tile,score,steps,player_type,enemy_type,seed
 
 - `[已实现]` `players/q_player.py`：轻量 Q-learning 模型玩家。
 - `[已实现]` `models/q_learning/player.py`：玩家线性 Q 模型。
-- `[已实现]` `train/train_player_q.py`：Q-learning 训练循环。
+- `[已实现]` `train/q_learning/player.py`：Q-learning 玩家训练循环。
 - `[已实现]` `players/dqn_player.py`：基于 PyTorch 的深度 DQN 玩家。
 - `[已实现]` `models/dqn_network.py`：PyTorch MLP DQN 网络。
-- `[已实现]` `train/dqn_checkpoints.py`：DQN checkpoint 保存、加载和 state_dict 共享工具。
-- `[已实现]` `train/replay_buffer.py`：DQN 经验回放池。
-- `[已实现]` `train/train_player_dqn.py`：深度 DQN 玩家训练循环。
-- `[已实现]` `train/stability.py`：DQN 稳定性控制，支持 best checkpoint、滚动 checkpoint、回滚与学习率调整。
+- `[已实现]` `train/dqn/checkpoints.py`：DQN checkpoint 保存、加载和 state_dict 共享工具。
+- `[已实现]` `train/dqn/replay_buffer.py`：DQN 经验回放池。
+- `[已实现]` `train/dqn/player.py`：深度 DQN 玩家训练循环。
+- `[已实现]` `train/dqn/stability.py`：DQN 稳定性控制，支持 best checkpoint、滚动 checkpoint、回滚与学习率调整。
 - `[已实现]` 自动选择 `cuda` / `cpu` 训练设备。
 - `[已实现]` 默认依赖切换为 GPU 版 PyTorch CUDA 12.8，CPU 版保留为 `requirements-cpu.txt`。
 - `[未实现]` `players/ppo_player.py`。
@@ -332,9 +336,9 @@ episode,max_tile,score,steps,player_type,enemy_type,seed
 
 - `[已实现]` `enemies/q_enemy.py`：轻量 Q-learning 敌对模型。
 - `[已实现]` `models/q_learning/enemy.py`：敌人线性 Q 模型。
-- `[已实现]` `train/train_enemy_q.py`：固定玩家后训练敌人。
+- `[已实现]` `train/q_learning/enemy.py`：固定玩家后训练敌人。
 - `[已实现]` `enemies/dqn_enemy.py`：PyTorch 深度 DQN 敌人。
-- `[已实现]` `train/train_enemy_dqn.py`：深度 DQN 敌人训练循环。
+- `[已实现]` `train/dqn/enemy.py`：深度 DQN 敌人训练循环。
 - `[已实现]` 敌人 DQN 输出 32 个出块动作，并对非法出块做动作屏蔽。
 - `[已实现]` 敌人动作空间：16 个格子 x 2 种数值。
 - `[已实现]` 合法出块动作过滤，相当于基础 action mask。
