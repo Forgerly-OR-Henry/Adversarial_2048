@@ -24,19 +24,20 @@ from domain.train.artifacts import (
 )
 from domain.train.dqn.checkpoints import (
     checkpoint_path,
-    clone_state_dict,
     load_dqn_checkpoint_into_model,
-    load_state_dict_to_device,
-    save_dqn_checkpoint,
 )
-from domain.train.dqn.common import masked_next_values
-from domain.train.looping import has_remaining_episodes, resolve_episode_limit, scheduled_epsilon
+from domain.train.dqn.common import (
+    apply_dqn_stability,
+    optimize_dqn_batch,
+    resolve_dqn_stability_config,
+    save_final_dqn_checkpoint,
+    sync_target_model_if_due,
+)
+from domain.train.looping import resolve_episode_limit, run_training_episode_loop
 from domain.train.dqn.replay_buffer import ReplayBuffer, Transition
 from domain.train.dqn.stability import (
     StabilityConfig,
     StabilityController,
-    set_optimizer_learning_rate,
-    stability_config_from_mapping,
 )
 from domain.train.q_learning.player import player_reward
 
@@ -117,12 +118,7 @@ def train_dqn_player(
     )
     max_steps = int(max_steps if max_steps is not None else PLAYER_DQN_DEFAULTS["max_steps"])
     device = device if device is not None else PLAYER_DQN_DEFAULTS.get("device")
-    if stability is None:
-        stability_config = stability_config_from_mapping(PLAYER_DQN_DEFAULTS.get("stability"))
-    elif isinstance(stability, StabilityConfig):
-        stability_config = stability
-    else:
-        stability_config = stability_config_from_mapping(stability)
+    stability_config = resolve_dqn_stability_config(PLAYER_DQN_DEFAULTS, stability)
 
     torch = require_torch()
     device = device or get_torch_device()
@@ -141,184 +137,112 @@ def train_dqn_player(
     optimizer = torch.optim.Adam(model.parameters(), lr=controller.learning_rate)
     loss_fn = torch.nn.SmoothL1Loss()
     replay = ReplayBuffer(replay_capacity, rng=rng)
-    scores: list[int] = []
-    max_tiles: list[int] = []
     best_checkpoint_path = checkpoint_path(output_path, "best")
     rolling_checkpoint_path = checkpoint_path(output_path, "checkpoint")
-    stopped = False
 
-    local_episode = 0
-    try:
-        while has_remaining_episodes(local_episode, remaining_episodes):
-            if stop_event is not None and stop_event.is_set():
-                stopped = True
+    def run_episode(episode: int, episode_seed: int | None, epsilon: float):
+        env = GameEnv(enemy=create_enemy(enemy_type, rng=rng), seed=episode_seed)
+        state = env.reset()
+
+        while not state.done and state.steps < max_steps:
+            legal_actions = env.get_legal_actions()
+            legal_indexes = [ACTIONS.index(action) for action in legal_actions]
+            if not legal_indexes:
                 break
-            local_episode += 1
-            episode = start_completed + local_episode
-            scheduled = scheduled_epsilon(
-                episode=episode,
-                limit=episode_limit,
-                epsilon_start=epsilon_start,
-                epsilon_end=epsilon_end,
+            # DQN 只在合法动作集合内做 epsilon-greedy，保证探索也不会产生非法移动。
+            # DQN performs epsilon-greedy only within legal actions, keeping exploration valid.
+            if rng.random() < epsilon:
+                action_index = rng.choice(legal_indexes)
+            else:
+                with torch.no_grad():
+                    q_values = model(batch_boards_to_tensor([state.board], device))[0]
+                action_index = max(legal_indexes, key=lambda index: float(q_values[index].item()))
+
+            previous_state = state
+            state = env.step(ACTIONS[action_index])
+            reward = player_reward(previous_state, state)
+            replay.push(
+                Transition(
+                    state=previous_state.board,
+                    action=action_index,
+                    reward=reward,
+                    next_state=state.board,
+                    done=state.done,
+                    legal_next_actions=[ACTIONS.index(action) for action in env.get_legal_actions()],
+                )
             )
-            epsilon = controller.episode_epsilon(scheduled)
-            episode_seed = None if seed is None else seed + episode - 1
-            env = GameEnv(enemy=create_enemy(enemy_type, rng=rng), seed=episode_seed)
-            state = env.reset()
-
-            while not state.done and state.steps < max_steps:
-                legal_actions = env.get_legal_actions()
-                legal_indexes = [ACTIONS.index(action) for action in legal_actions]
-                if not legal_indexes:
-                    break
-                # DQN 只在合法动作集合内做 epsilon-greedy，保证探索也不会产生非法移动。
-                # DQN performs epsilon-greedy only within legal actions, keeping exploration valid.
-                if rng.random() < epsilon:
-                    action_index = rng.choice(legal_indexes)
-                else:
-                    with torch.no_grad():
-                        q_values = model(batch_boards_to_tensor([state.board], device))[0]
-                    action_index = max(legal_indexes, key=lambda index: float(q_values[index].item()))
-
-                previous_state = state
-                state = env.step(ACTIONS[action_index])
-                reward = player_reward(previous_state, state)
-                replay.push(
-                    Transition(
-                        state=previous_state.board,
-                        action=action_index,
-                        reward=reward,
-                        next_state=state.board,
-                        done=state.done,
-                        legal_next_actions=[ACTIONS.index(action) for action in env.get_legal_actions()],
-                    )
-                )
-
-                if len(replay) >= max(batch_size, min_replay_size):
-                    # 经验回放打散相邻局面相关性，目标网络提供更稳定的 bootstrap 估值。
-                    # Replay breaks adjacent-state correlation; the target network gives stabler bootstrap values.
-                    batch = replay.sample(batch_size)
-                    states = batch_boards_to_tensor([item.state for item in batch], device)
-                    next_states = batch_boards_to_tensor([item.next_state for item in batch], device)
-                    actions = torch.tensor([item.action for item in batch], dtype=torch.long, device=device).unsqueeze(1)
-                    rewards = torch.tensor([item.reward for item in batch], dtype=torch.float32, device=device)
-                    dones = torch.tensor([item.done for item in batch], dtype=torch.float32, device=device)
-                    current = model(states).gather(1, actions).squeeze(1)
-                    next_values = masked_next_values(
-                        torch,
-                        target_model,
-                        next_states,
-                        [item.legal_next_actions for item in batch],
-                        device,
-                    )
-                    target = rewards + gamma * next_values * (1.0 - dones)
-                    loss = loss_fn(current, target)
-                    optimizer.zero_grad()
-                    loss.backward()
-                    if stability_config.enabled and stability_config.max_grad_norm > 0:
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), stability_config.max_grad_norm)
-                    optimizer.step()
-
-            if episode % target_update_interval == 0:
-                # 周期性同步目标网络，避免每个梯度步都追逐正在变化的在线网络。
-                # Periodically sync the target network instead of chasing the changing online network each step.
-                target_model.load_state_dict(model.state_dict())
-
-            scores.append(state.score)
-            max_tiles.append(state.max_tile)
-            decision = controller.observe(
-                episode=episode,
-                metric=float(state.score),
-                model_state=clone_state_dict(model),
+            optimize_dqn_batch(
+                torch=torch,
+                model=model,
+                target_model=target_model,
+                loss_fn=loss_fn,
+                optimizer=optimizer,
+                replay=replay,
+                batch_size=batch_size,
+                min_replay_size=min_replay_size,
+                gamma=gamma,
+                device=device,
+                stability_config=stability_config,
             )
-            if decision.learning_rate is not None:
-                set_optimizer_learning_rate(optimizer, decision.learning_rate)
-            if decision.rollback and controller.best_state is not None:
-                # 稳定性控制触发回滚时，在线网络和目标网络必须保持一致。
-                # When stability rolls back, keep the online and target networks in sync.
-                load_state_dict_to_device(model, controller.best_state, device)
-                target_model.load_state_dict(model.state_dict())
-            if decision.improved and stability_config.keep_best_model:
-                save_dqn_checkpoint(
-                    torch,
-                    best_checkpoint_path,
-                    model,
-                    episode,
-                    opponent_key="enemy_type",
-                    opponent_type=enemy_type,
-                    device=device,
-                    metadata={
-                        "best_metric": controller.best_metric,
-                        "best_episode": controller.best_episode,
-                        "learning_rate": controller.learning_rate,
-                        "epsilon": controller.epsilon,
-                        "reason": decision.reason,
-                    },
-                )
-            if stability_config.enabled and stability_config.checkpoint_interval > 0 and episode % stability_config.checkpoint_interval == 0:
-                save_dqn_checkpoint(
-                    torch,
-                    rolling_checkpoint_path,
-                    model,
-                    episode,
-                    opponent_key="enemy_type",
-                    opponent_type=enemy_type,
-                    device=device,
-                    metadata={
-                        "best_metric": controller.best_metric,
-                        "best_episode": controller.best_episode,
-                        "learning_rate": controller.learning_rate,
-                        "epsilon": controller.epsilon,
-                        "reason": decision.reason,
-                    },
-                )
-            if progress_callback is not None:
-                progress_callback(episode, target_episodes, state, epsilon, device)
-            if stop_event is not None and stop_event.is_set():
-                stopped = True
-                break
-    except KeyboardInterrupt:
-        stopped = True
 
-    completed_episodes = start_completed + len(scores)
+        sync_target_model_if_due(model, target_model, episode, target_update_interval)
+        apply_dqn_stability(
+            torch=torch,
+            model=model,
+            target_model=target_model,
+            optimizer=optimizer,
+            controller=controller,
+            stability_config=stability_config,
+            episode=episode,
+            metric=float(state.score),
+            best_checkpoint_path=best_checkpoint_path,
+            rolling_checkpoint_path=rolling_checkpoint_path,
+            opponent_key="enemy_type",
+            opponent_type=enemy_type,
+            device=device,
+        )
+        return state
+
+    def report_progress(episode: int, total: int | None, state, epsilon: float) -> None:
+        if progress_callback is not None:
+            progress_callback(episode, total, state, epsilon, device)
+
+    loop_result = run_training_episode_loop(
+        start_completed=start_completed,
+        remaining_episodes=remaining_episodes,
+        limit=episode_limit,
+        seed=seed,
+        epsilon_start=epsilon_start,
+        epsilon_end=epsilon_end,
+        epsilon_resolver=controller.episode_epsilon,
+        episode_runner=run_episode,
+        stop_event=stop_event,
+        progress_callback=report_progress if progress_callback is not None else None,
+    )
+    scores = loop_result.scores
+    max_tiles = loop_result.max_tiles
+    stopped = loop_result.stopped
+
+    completed_episodes = start_completed + loop_result.episodes_run
     status = (
         TRAINING_STATUS_INCOMPLETE
         if stopped and target_episodes is not None and completed_episodes < target_episodes
         else TRAINING_STATUS_COMPLETED
     )
-    if (
-        stability_config.enabled
-        and stability_config.restore_best_on_finish
-        and controller.best_state is not None
-        and status == TRAINING_STATUS_COMPLETED
-    ):
-        # 训练结束可恢复历史最佳权重，避免最终几局退化污染输出模型。
-        # Finishing can restore the best weights so late degradation does not pollute the output model.
-        load_state_dict_to_device(model, controller.best_state, device)
-    save_dqn_checkpoint(
-        torch,
-        output_path,
-        model,
-        completed_episodes,
+    save_final_dqn_checkpoint(
+        torch=torch,
+        output_path=output_path,
+        model=model,
+        completed_episodes=completed_episodes,
         opponent_key="enemy_type",
         opponent_type=enemy_type,
         device=device,
-        metadata={
-            "best_metric": controller.best_metric,
-            "best_episode": controller.best_episode,
-            "learning_rate": controller.learning_rate,
-            "epsilon": controller.epsilon,
-            "status": status,
-            "target_episodes": target_episodes,
-            "completed_episodes": completed_episodes,
-            "reference_model_path": selected_reference,
-            "resume_run_path": resume_path,
-            "restored_best_on_finish": (
-                stability_config.enabled
-                and stability_config.restore_best_on_finish
-                and status == TRAINING_STATUS_COMPLETED
-            ),
-        },
+        controller=controller,
+        stability_config=stability_config,
+        status=status,
+        target_episodes=target_episodes,
+        reference_model_path=selected_reference,
+        resume_run_path=resume_path,
     )
     run_log_path = training_run_log_path(run_directory, output_path)
     parameters = {

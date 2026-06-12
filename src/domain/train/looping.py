@@ -68,6 +68,7 @@ def run_training_episode_loop(
     epsilon_start: float,
     epsilon_end: float,
     episode_runner: Callable[[int, int | None, float], Any],
+    epsilon_resolver: Callable[[float], float] | None = None,
     stop_event: Any = None,
     progress_callback: Callable[[int, int | None, Any, float], None] | None = None,
 ) -> TrainingLoopResult:
@@ -84,12 +85,13 @@ def run_training_episode_loop(
                 break
             local_episode += 1
             episode = start_completed + local_episode
-            epsilon = scheduled_epsilon(
+            scheduled = scheduled_epsilon(
                 episode=episode,
                 limit=limit,
                 epsilon_start=epsilon_start,
                 epsilon_end=epsilon_end,
             )
+            epsilon = epsilon_resolver(scheduled) if epsilon_resolver is not None else scheduled
             episode_seed = None if seed is None else seed + episode - 1
             state = episode_runner(episode, episode_seed, epsilon)
 
