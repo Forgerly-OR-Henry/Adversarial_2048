@@ -7,7 +7,6 @@ import json
 import sys
 from pathlib import Path
 
-from cli.formatters import json_ready
 from domain.enemies import create_enemy
 from domain.evaluation import compare_training_artifacts, run_experiment
 from domain.game.board import format_board
@@ -23,6 +22,7 @@ from domain.train import (
     train_q_player,
 )
 from ui import run_gui
+from utils.serialization import json_ready
 from utils.training_log import log_error
 
 
@@ -89,14 +89,7 @@ def dispatch(args: argparse.Namespace) -> None:
                 learning_rate=args.learning_rate,
                 gamma=args.gamma,
             )
-            print(f"Saved Q player model to {summary.output_path}")
-            print(
-                "Training summary: "
-                f"episodes={summary.episodes}, "
-                f"average_score={summary.average_score:.1f}, "
-                f"average_max_tile={summary.average_max_tile:.1f}, "
-                f"best_max_tile={summary.best_max_tile}"
-            )
+            _print_player_training_summary("Q player", summary)
         elif args.command == "train-enemy":
             summary = train_q_enemy(
                 episodes=args.episodes,
@@ -106,14 +99,7 @@ def dispatch(args: argparse.Namespace) -> None:
                 learning_rate=args.learning_rate,
                 gamma=args.gamma,
             )
-            print(f"Saved Q enemy model to {summary.output_path}")
-            print(
-                "Training summary: "
-                f"episodes={summary.episodes}, "
-                f"average_player_score={summary.average_player_score:.1f}, "
-                f"average_player_max_tile={summary.average_player_max_tile:.1f}, "
-                f"best_suppressed_max_tile={summary.best_suppressed_max_tile}"
-            )
+            _print_enemy_training_summary("Q enemy", summary)
         elif args.command == "train-player-dqn":
             summary = train_dqn_player(
                 episodes=args.episodes,
@@ -123,15 +109,7 @@ def dispatch(args: argparse.Namespace) -> None:
                 learning_rate=args.learning_rate,
                 gamma=args.gamma,
             )
-            print(f"Saved DQN player model to {summary.output_path}")
-            print(
-                "Training summary: "
-                f"episodes={summary.episodes}, "
-                f"device={summary.device}, "
-                f"average_score={summary.average_score:.1f}, "
-                f"average_max_tile={summary.average_max_tile:.1f}, "
-                f"best_max_tile={summary.best_max_tile}"
-            )
+            _print_player_training_summary("DQN player", summary)
         elif args.command == "train-enemy-dqn":
             summary = train_dqn_enemy(
                 episodes=args.episodes,
@@ -141,15 +119,7 @@ def dispatch(args: argparse.Namespace) -> None:
                 learning_rate=args.learning_rate,
                 gamma=args.gamma,
             )
-            print(f"Saved DQN enemy model to {summary.output_path}")
-            print(
-                "Training summary: "
-                f"episodes={summary.episodes}, "
-                f"device={summary.device}, "
-                f"average_player_score={summary.average_player_score:.1f}, "
-                f"average_player_max_tile={summary.average_player_max_tile:.1f}, "
-                f"best_suppressed_max_tile={summary.best_suppressed_max_tile}"
-            )
+            _print_enemy_training_summary("DQN enemy", summary)
         elif args.command == "training-list":
             _print_json(list_training_artifacts())
         elif args.command == "training-compare":
@@ -188,3 +158,29 @@ def dispatch(args: argparse.Namespace) -> None:
     except Exception as exc:
         log_error("cli", exc, vars(args))
         raise
+
+
+def _print_player_training_summary(label: str, summary) -> None:
+    print(f"Saved {label} model to {summary.output_path}")
+    device = f"device={summary.device}, " if hasattr(summary, "device") else ""
+    print(
+        "Training summary: "
+        f"episodes={summary.episodes}, "
+        f"{device}"
+        f"average_score={summary.average_score:.1f}, "
+        f"average_max_tile={summary.average_max_tile:.1f}, "
+        f"best_max_tile={summary.best_max_tile}"
+    )
+
+
+def _print_enemy_training_summary(label: str, summary) -> None:
+    print(f"Saved {label} model to {summary.output_path}")
+    device = f"device={summary.device}, " if hasattr(summary, "device") else ""
+    print(
+        "Training summary: "
+        f"episodes={summary.episodes}, "
+        f"{device}"
+        f"average_player_score={summary.average_player_score:.1f}, "
+        f"average_player_max_tile={summary.average_player_max_tile:.1f}, "
+        f"best_suppressed_max_tile={summary.best_suppressed_max_tile}"
+    )

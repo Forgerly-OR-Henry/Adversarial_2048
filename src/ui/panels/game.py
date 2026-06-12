@@ -17,6 +17,7 @@ from ui.components import (
     create_select,
     set_button_visual,
 )
+from ui.panels.shared import make_grid_placer
 from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import ENEMY_LABELS, ENEMY_TYPES_BY_LABEL, PLAYER_LABELS, PLAYER_TYPES_BY_LABEL
 from ui.settings.theme import BUTTON_NORMAL, BUTTON_PRESSED
@@ -36,19 +37,7 @@ class GamePanel:
 
     def _build(self, parent: ttk.Frame) -> None:
         controls, area = create_area_panel(parent, "对局控制")
-
-        def place(
-            widget: tk.Misc,
-            row: int,
-            col: int,
-            rowspan: int = 1,
-            colspan: int = 1,
-            *,
-            sticky: str = "nsew",
-            padx: int = 6,
-            pady: int | None = None,
-        ) -> None:
-            area.grid_widget(widget, row, col, rowspan, colspan, sticky=sticky, padx=padx, pady=pady)
+        place = make_grid_placer(area)
 
         place(ttk.Label(controls, text="本局敌人"), 0, 0, colspan=3, sticky="w")
         enemy_menu = create_select(

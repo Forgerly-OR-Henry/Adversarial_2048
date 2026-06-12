@@ -9,8 +9,8 @@ from config import get_model_path
 from domain.enemies.base_enemy import BaseEnemy, Spawn
 from domain.game.state import GameState
 from domain.models import ENEMY_ACTIONS, action_to_spawn, get_legal_spawn_actions
-from domain.models.dqn_network import DQNNetwork, board_to_tensor
-from domain.models.torch_utils import get_torch_device, load_torch_checkpoint, require_torch
+from domain.models.dqn_policy import best_legal_dqn_action, load_dqn_policy_model
+from domain.models.torch_utils import get_torch_device, require_torch
 
 DEFAULT_DQN_ENEMY_PATH = get_model_path("dqn_enemy")
 
@@ -30,13 +30,7 @@ class DQNEnemy(BaseEnemy):
         self.rng = rng or random.Random()
         self.epsilon = epsilon
         self.device = device or get_torch_device()
-        self.model = DQNNetwork(output_size=len(ENEMY_ACTIONS)).to(self.device)
-        model_path = Path(model_path)
-        if model_path.exists():
-            checkpoint = load_torch_checkpoint(self.torch, model_path, map_location=self.device)
-            state_dict = checkpoint["model_state_dict"] if "model_state_dict" in checkpoint else checkpoint
-            self.model.load_state_dict(state_dict)
-        self.model.eval()
+        self.model = load_dqn_policy_model(self.torch, model_path, output_size=len(ENEMY_ACTIONS), device=self.device)
 
     def select_spawn(self, state: GameState) -> Spawn:
         legal_actions = get_legal_spawn_actions(state.board)
@@ -44,8 +38,7 @@ class DQNEnemy(BaseEnemy):
             raise ValueError("No legal spawn actions available.")
         if self.rng.random() < self.epsilon:
             return action_to_spawn(self.rng.choice(legal_actions))
-        legal_indexes = [ENEMY_ACTIONS.index(action) for action in legal_actions]
-        with self.torch.no_grad():
-            q_values = self.model(board_to_tensor(state.board, self.device))[0]
-        best_index = max(legal_indexes, key=lambda index: float(q_values[index].item()))
-        return action_to_spawn(ENEMY_ACTIONS[best_index])
+        action = best_legal_dqn_action(self.torch, self.model, state.board, self.device, ENEMY_ACTIONS, legal_actions)
+        if action is None:
+            raise ValueError("No legal spawn actions available.")
+        return action_to_spawn(action)

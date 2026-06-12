@@ -42,8 +42,7 @@ adversarial_2048/
 │   ├── cli/                          # [已实现] 命令行入口层
 │   │   ├── __init__.py               # [已实现] 导出 build_parser / dispatch
 │   │   ├── parser.py                 # [已实现] argparse 命令和参数定义
-│   │   ├── commands.py               # [已实现] CLI 命令执行、终端游玩、训练/评估分发
-│   │   └── formatters.py             # [已实现] CLI JSON 输出格式化
+│   │   └── commands.py               # [已实现] CLI 命令执行、终端游玩、训练/评估分发
 │   │
 │   ├── config/                       # [已实现] 配置加载包
 │   │   └── __init__.py               # [已实现] YAML/简易 YAML 配置加载器，提供路径、训练、评估、UI 默认值
@@ -76,9 +75,12 @@ adversarial_2048/
 │   │   │   ├── __init__.py           # [已实现] 导出 Q-learning 模型和敌人动作映射
 │   │   │   ├── q_learning/           # [已实现] 轻量 Q-learning 模型包
 │   │   │   │   ├── __init__.py       # [已实现] 导出玩家/敌人 Q 模型
+│   │   │   │   ├── player_features.py # [已实现] Q-learning 棋盘特征编码
+│   │   │   │   ├── linear.py         # [已实现] 线性 Q 模型共享保存、加载和更新逻辑
 │   │   │   │   ├── player.py         # [已实现] 纯标准库玩家线性 Q 模型
 │   │   │   │   └── enemy.py          # [已实现] 纯标准库敌人线性 Q 模型，32 个出块动作
 │   │   │   ├── torch_utils.py        # [已实现] PyTorch 检测、CUDA/CPU 设备选择
+│   │   │   ├── dqn_policy.py         # [已实现] DQN 策略模型加载和合法动作选择工具
 │   │   │   └── dqn_network.py        # [已实现] PyTorch MLP DQN 网络
 │   │   ├── train/                    # [已实现/待扩展] 训练脚本目录
 │   │   │   ├── __init__.py           # [已实现] 导出 Q/DQN 训练入口，DQN 按需懒加载
@@ -92,6 +94,7 @@ adversarial_2048/
 │   │   │   └── dqn/                  # [已实现] DQN 训练子包
 │   │   │       ├── __init__.py       # [已实现] 导出 DQN 训练入口，按需懒加载 Torch
 │   │   │       ├── checkpoints.py    # [已实现] DQN checkpoint 和 state_dict 共享工具
+│   │   │       ├── common.py         # [已实现] DQN 合法动作 mask 等共享训练计算
 │   │   │       ├── replay_buffer.py  # [已实现] DQN 经验回放池
 │   │   │       ├── stability.py      # [已实现] DQN 稳定性控制、回滚、学习率调整配置
 │   │   │       ├── player.py         # [已实现] PyTorch DQN 玩家训练循环
@@ -118,13 +121,13 @@ adversarial_2048/
 │   │   │   ├── board_view.py         # [已实现] 棋盘 Canvas 绘制与方块移动动画
 │   │   │   ├── buttons.py            # [已实现] 操作按钮构造和按钮视觉状态切换
 │   │   │   ├── inputs.py             # [已实现] 下拉框、步进器、文本输入框和 GRID_CONTROL_OPTIONS
-│   │   │   ├── messages.py           # [已实现] 状态提示区和结果文本区构造
-│   │   │   └── controls.py           # [已实现] 兼容导出层，转发到 buttons/inputs/messages
+│   │   │   └── messages.py           # [已实现] 状态提示区和结果文本区构造
 │   │   ├── panels/                   # [已实现] 主界面功能面板
 │   │   │   ├── __init__.py           # [已实现] 导出功能面板构造器
 │   │   │   ├── game.py               # [已实现] 对局控制面板，使用区域栅格布局
 │   │   │   ├── training.py           # [已实现] 模型训练面板，使用区域栅格布局并复用训练后端
 │   │   │   ├── evaluation.py         # [已实现] 单项评估平台面板，使用区域栅格布局
+│   │   │   ├── shared.py             # [已实现] 面板共享标签去重和时间显示工具
 │   │   │   └── training_platform.py  # [已实现] 训练平台：产物列表、合并、自动调参入口，使用区域栅格布局
 │   │   ├── settings/                 # [已实现] UI 主题、固定尺寸和选项配置
 │   │   │   ├── __init__.py           # [已实现] UI 配置包
@@ -319,10 +322,14 @@ episode,max_tile,score,steps,player_type,enemy_type,seed
 
 - `[已实现]` `players/q_player.py`：轻量 Q-learning 模型玩家。
 - `[已实现]` `models/q_learning/player.py`：玩家线性 Q 模型。
+- `[已实现]` `models/q_learning/linear.py`：玩家/敌人线性 Q 模型共享实现。
+- `[已实现]` `models/q_learning/player_features.py`：棋盘特征编码。
 - `[已实现]` `train/q_learning/player.py`：Q-learning 玩家训练循环。
 - `[已实现]` `players/dqn_player.py`：基于 PyTorch 的深度 DQN 玩家。
 - `[已实现]` `models/dqn_network.py`：PyTorch MLP DQN 网络。
+- `[已实现]` `models/dqn_policy.py`：DQN 策略加载和合法动作选择工具。
 - `[已实现]` `train/dqn/checkpoints.py`：DQN checkpoint 保存、加载和 state_dict 共享工具。
+- `[已实现]` `train/dqn/common.py`：DQN 训练共享计算。
 - `[已实现]` `train/dqn/replay_buffer.py`：DQN 经验回放池。
 - `[已实现]` `train/dqn/player.py`：深度 DQN 玩家训练循环。
 - `[已实现]` `train/dqn/stability.py`：DQN 稳定性控制，支持 best checkpoint、滚动 checkpoint、回滚与学习率调整。

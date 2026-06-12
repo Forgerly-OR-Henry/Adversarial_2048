@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +30,7 @@ from domain.train.dqn.checkpoints import (
     load_state_dict_to_device,
     save_dqn_checkpoint,
 )
+from domain.train.dqn.common import masked_next_values
 from domain.train.dqn.replay_buffer import ReplayBuffer, Transition
 from domain.train.dqn.stability import (
     StabilityConfig,
@@ -64,21 +65,6 @@ class DQNTrainingSummary:
     reference_model_path: Path | None = None
     resume_run_path: Path | None = None
     run_log_path: Path | None = None
-
-
-def _masked_next_values(torch, target_model, next_states, legal_next_actions_batch, device: str):
-    # 目标值只允许从下一状态的合法动作中取最大值，避免网络学习非法移动。
-    # Target values only maximize over legal next actions so the network does not learn illegal moves.
-    with torch.no_grad():
-        q_values = target_model(next_states)
-        values = []
-        for row, legal_indexes in zip(q_values, legal_next_actions_batch):
-            if legal_indexes:
-                indexes = torch.tensor(legal_indexes, dtype=torch.long, device=device)
-                values.append(row.index_select(0, indexes).max())
-            else:
-                values.append(torch.tensor(0.0, device=device))
-        return torch.stack(values)
 
 
 def train_dqn_player(
@@ -210,7 +196,7 @@ def train_dqn_player(
                 rewards = torch.tensor([item.reward for item in batch], dtype=torch.float32, device=device)
                 dones = torch.tensor([item.done for item in batch], dtype=torch.float32, device=device)
                 current = model(states).gather(1, actions).squeeze(1)
-                next_values = _masked_next_values(
+                next_values = masked_next_values(
                     torch,
                     target_model,
                     next_states,
@@ -385,26 +371,7 @@ def train_dqn_player(
         run_log_path=run_log_path,
     )
     if info_path is not None or published_path is not None:
-        summary = DQNTrainingSummary(
-            episodes=summary.episodes,
-            output_path=summary.output_path,
-            average_score=summary.average_score,
-            average_max_tile=summary.average_max_tile,
-            best_max_tile=summary.best_max_tile,
-            device=summary.device,
-            best_checkpoint_path=summary.best_checkpoint_path,
-            best_episode=summary.best_episode,
-            final_learning_rate=summary.final_learning_rate,
-            final_epsilon=summary.final_epsilon,
-            latest_output_path=published_path,
-            info_path=info_path,
-            status=summary.status,
-            target_episodes=summary.target_episodes,
-            completed_episodes=summary.completed_episodes,
-            reference_model_path=summary.reference_model_path,
-            resume_run_path=summary.resume_run_path,
-            run_log_path=summary.run_log_path,
-        )
+        summary = replace(summary, latest_output_path=published_path, info_path=info_path)
     log_training_result(
         "player_dqn",
         parameters,

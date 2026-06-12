@@ -35,7 +35,6 @@ from domain.train.merge import merge_training_artifacts
 from domain.train.tuning import generate_tuning_candidates
 from domain.train.q_learning.player import train_q_player
 from ui.components import GRID_CONTROL_OPTIONS as EXPORTED_GRID_CONTROL_OPTIONS
-from ui.components.controls import GRID_CONTROL_OPTIONS as COMPAT_GRID_CONTROL_OPTIONS
 from ui.components.inputs import GRID_CONTROL_OPTIONS as INPUT_GRID_CONTROL_OPTIONS
 from ui.settings.options import (
     EVALUATION_TARGET_LABELS,
@@ -226,7 +225,6 @@ class TrainingPlatformTest(unittest.TestCase):
 
     def test_grid_control_options_are_shared_exports(self):
         self.assertIs(EXPORTED_GRID_CONTROL_OPTIONS, INPUT_GRID_CONTROL_OPTIONS)
-        self.assertIs(COMPAT_GRID_CONTROL_OPTIONS, INPUT_GRID_CONTROL_OPTIONS)
         self.assertEqual(INPUT_GRID_CONTROL_OPTIONS, {"fixed_height": False})
 
     def test_gui_single_evaluation_output_field_is_directory_only(self):

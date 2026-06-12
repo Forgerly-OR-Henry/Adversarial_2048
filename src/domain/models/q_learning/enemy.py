@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import json
-import random
 from dataclasses import dataclass
-from pathlib import Path
+from typing import ClassVar
 
 from config import get_model_path
 from domain.game.board import get_empty_cells
-from domain.models.q_learning.player import encode_board
+from domain.models.q_learning.linear import LinearFeatureQModel
 
 DEFAULT_ENEMY_MODEL_PATH = get_model_path("q_learning_enemy")
 
@@ -44,95 +42,16 @@ def get_legal_spawn_actions(board: list[list[int]]) -> list[str]:
 
 
 @dataclass
-class EnemyQModel:
+class EnemyQModel(LinearFeatureQModel):
     """面向 32 个出块动作的线性 Q 模型。 / Linear Q model over the 32 enemy spawn actions."""
+
+    model_type: ClassVar[str] = "enemy_linear_q"
+    default_model_path: ClassVar = DEFAULT_ENEMY_MODEL_PATH
+    default_actions: ClassVar[tuple[str, ...]] = ENEMY_ACTIONS
+
     weights: list[list[float]]
     actions: tuple[str, ...] = ENEMY_ACTIONS
 
     @classmethod
-    def create(cls, rng: random.Random | None = None) -> "EnemyQModel":
-        rng = rng or random.Random()
-        feature_count = len(encode_board([[0, 0, 0, 0] for _ in range(4)]))
-        weights = [
-            [rng.uniform(-0.01, 0.01) for _ in range(feature_count)]
-            for _ in ENEMY_ACTIONS
-        ]
-        return cls(weights=weights)
-
-    @classmethod
-    def load(cls, path: str | Path = DEFAULT_ENEMY_MODEL_PATH) -> "EnemyQModel":
-        model_path = Path(path)
-        with model_path.open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
-        return cls(weights=data["weights"], actions=tuple(data.get("actions", ENEMY_ACTIONS)))
-
-    @classmethod
-    def load_or_create(cls, path: str | Path = DEFAULT_ENEMY_MODEL_PATH, rng: random.Random | None = None) -> "EnemyQModel":
-        model_path = Path(path)
-        if model_path.exists():
-            return cls.load(model_path)
-        return cls.create(rng=rng)
-
-    def save(self, path: str | Path = DEFAULT_ENEMY_MODEL_PATH) -> Path:
-        model_path = Path(path)
-        model_path.parent.mkdir(parents=True, exist_ok=True)
-        data = {
-            "model_type": "enemy_linear_q",
-            "version": 1,
-            "actions": list(self.actions),
-            "weights": self.weights,
-        }
-        with model_path.open("w", encoding="utf-8") as handle:
-            json.dump(data, handle, indent=2)
-        return model_path
-
-    def q_values(self, board: list[list[int]]) -> dict[str, float]:
-        features = encode_board(board)
-        return {
-            action: sum(weight * feature for weight, feature in zip(action_weights, features))
-            for action, action_weights in zip(self.actions, self.weights)
-        }
-
-    def best_action(self, board: list[list[int]], legal_actions: list[str]) -> str | None:
-        if not legal_actions:
-            return None
-        q_values = self.q_values(board)
-        return max(legal_actions, key=lambda action: q_values[action])
-
-    def epsilon_greedy_action(
-        self,
-        board: list[list[int]],
-        legal_actions: list[str],
-        epsilon: float,
-        rng: random.Random,
-    ) -> str | None:
-        if not legal_actions:
-            return None
-        if rng.random() < epsilon:
-            return rng.choice(legal_actions)
-        return self.best_action(board, legal_actions)
-
-    def update(
-        self,
-        board: list[list[int]],
-        action: str,
-        target: float,
-        learning_rate: float,
-        error_clip: float = 25.0,
-    ) -> float:
-        action_index = self.actions.index(action)
-        features = encode_board(board)
-        prediction = sum(weight * feature for weight, feature in zip(self.weights[action_index], features))
-        # 敌人复用玩家棋盘特征，但目标值来自“让局面变差”的奖励函数。
-        # The enemy reuses player board features, but targets come from the badness reward.
-        error = max(-error_clip, min(error_clip, target - prediction))
-        for index, feature in enumerate(features):
-            self.weights[action_index][index] += learning_rate * error * feature
-        return error
-
-    def max_next_q(self, board: list[list[int]]) -> float:
-        legal_actions = get_legal_spawn_actions(board)
-        if not legal_actions:
-            return 0.0
-        q_values = self.q_values(board)
-        return max(q_values[action] for action in legal_actions)
+    def legal_actions(cls, board: list[list[int]]) -> list[str]:
+        return get_legal_spawn_actions(board)

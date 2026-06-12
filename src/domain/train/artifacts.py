@@ -169,9 +169,30 @@ def write_training_info(
 
 def publish_latest(model_path: Path, latest_path: Path) -> Path:
     """把训练模型发布到 latest 默认路径。 / Publish a trained model to the default latest path."""
-    latest_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(model_path, latest_path)
+    replace_latest_model(model_path, latest_path)
     return latest_path
+
+
+def replace_latest_model(source_model_path: Path, latest_model_path: Path) -> bool:
+    """替换 latest 目录中的模型文件。 / Replace the model file inside a latest directory."""
+    latest_directory = latest_model_path.parent
+    try:
+        source_resolved = source_model_path.resolve()
+        latest_resolved = latest_model_path.resolve()
+    except OSError:
+        source_resolved = source_model_path
+        latest_resolved = latest_model_path
+
+    if source_resolved == latest_resolved:
+        return False
+
+    removed_previous_latest = latest_directory.exists()
+    if removed_previous_latest:
+        shutil.rmtree(latest_directory) if latest_directory.is_dir() else latest_directory.unlink()
+
+    latest_directory.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_model_path, latest_model_path)
+    return removed_previous_latest
 
 
 def finalize_training_artifact(

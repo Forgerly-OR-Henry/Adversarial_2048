@@ -19,6 +19,7 @@ from ui.components import (
     create_text_entry,
     set_button_visual,
 )
+from ui.panels.shared import display_timestamp, make_grid_placer, unique_label
 from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import (
     EVALUATION_TARGET_LABELS,
@@ -84,19 +85,7 @@ class EvaluationPanel:
 
     def _build(self, parent: ttk.Frame) -> None:
         experiment, area = create_area_panel(parent, "单项评估平台设置")
-
-        def place(
-            widget: tk.Misc,
-            row: int,
-            col: int,
-            rowspan: int = 1,
-            colspan: int = 1,
-            *,
-            sticky: str = "nsew",
-            padx: int = 6,
-            pady: int | None = None,
-        ) -> None:
-            area.grid_widget(widget, row, col, rowspan, colspan, sticky=sticky, padx=padx, pady=pady)
+        place = make_grid_placer(area)
 
         place(ttk.Label(experiment, text="评估对象"), 0, 0, colspan=3, sticky="w")
         place(
@@ -423,7 +412,7 @@ def build_evaluation_panel(app: Any, parent: ttk.Frame) -> EvaluationPanel:
 def _model_option_map(options: list[EvaluationModelOption]) -> dict[str, EvaluationModelOption]:
     labels: dict[str, EvaluationModelOption] = {}
     for option in options:
-        labels[_unique_model_label(labels, _model_option_label(option))] = option
+        labels[unique_label(labels, _model_option_label(option))] = option
     return labels
 
 
@@ -432,20 +421,7 @@ def _model_option_label(option: EvaluationModelOption) -> str:
         return PLAYER_LABELS[option.evaluation_type]
     if option.role == "auto_enemy":
         return ENEMY_LABELS[option.evaluation_type]
-    return f"{TRAINING_TYPE_LABELS[option.training_type]} | {_display_timestamp(option.created_at)}"
-
-
-def _unique_model_label(options: dict[str, EvaluationModelOption], base_label: str) -> str:
-    if base_label not in options:
-        return base_label
-    index = 2
-    while f"{base_label} #{index}" in options:
-        index += 1
-    return f"{base_label} #{index}"
-
-
-def _display_timestamp(value: str) -> str:
-    return value.replace("T", " ") if value else "unknown"
+    return f"{TRAINING_TYPE_LABELS[option.training_type]} | {display_timestamp(option.created_at)}"
 
 
 __all__ = [

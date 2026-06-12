@@ -20,6 +20,7 @@ from ui.components import (
     create_text_entry,
     set_button_visual,
 )
+from ui.panels.shared import display_timestamp, make_grid_placer, unique_label
 from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import TRAINING_ALGORITHM_LABELS, TRAINING_TARGET_LABELS, TRAINING_TYPE_LABELS
 from ui.settings.theme import BUTTON_BUSY, BUTTON_NORMAL
@@ -52,9 +53,9 @@ def _append_artifact_label(
     created_at: str,
     model_path: str,
 ) -> None:
-    label = _unique_artifact_label(
+    label = unique_label(
         labels,
-        f"{TRAINING_TYPE_LABELS.get(training_type, training_type)} | {_display_timestamp(created_at)}",
+        f"{TRAINING_TYPE_LABELS.get(training_type, training_type)} | {display_timestamp(created_at)}",
     )
     labels[label] = model_path
 
@@ -64,19 +65,6 @@ def _artifact_model_path(artifact: dict[str, Any]) -> str | None:
     if not value:
         return None
     return str(value)
-
-
-def _unique_artifact_label(labels: dict[str, str], base_label: str) -> str:
-    if base_label not in labels:
-        return base_label
-    index = 2
-    while f"{base_label} #{index}" in labels:
-        index += 1
-    return f"{base_label} #{index}"
-
-
-def _display_timestamp(value: str) -> str:
-    return value.replace("T", " ") if value else "unknown"
 
 
 class TrainingPlatformPanel:
@@ -102,19 +90,7 @@ class TrainingPlatformPanel:
 
     def _build(self, parent: ttk.Frame) -> None:
         self.platform, self._area_grid = create_area_panel(parent, "训练智能评估平台")
-
-        def place(
-            widget: tk.Misc,
-            row: int,
-            col: int,
-            rowspan: int = 1,
-            colspan: int = 1,
-            *,
-            sticky: str = "nsew",
-            padx: int = 6,
-            pady: int | None = None,
-        ) -> None:
-            self._area_grid.grid_widget(widget, row, col, rowspan, colspan, sticky=sticky, padx=padx, pady=pady)
+        place = make_grid_placer(self._area_grid)
 
         place(ttk.Label(self.platform, text="训练成果 A"), 0, 0, colspan=3, sticky="w")
         self.artifact_a_select = create_select(

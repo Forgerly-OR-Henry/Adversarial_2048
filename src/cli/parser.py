@@ -37,37 +37,38 @@ def build_parser() -> argparse.ArgumentParser:
     gui.add_argument("--player", choices=["human", "heuristic", "q_ai", "dqn_player"], default=ui_defaults["player"])
     gui.add_argument("--enemy", choices=enemy_choices, default=ui_defaults["enemy"])
 
-    train_player = subparsers.add_parser("train-player", help="Train the Q-model player.")
-    train_player.add_argument("--episodes", type=int, default=player_q_defaults["episodes"])
-    train_player.add_argument("--enemy", choices=enemy_choices, default=player_q_defaults["enemy"])
-    train_player.add_argument("--seed", type=int, default=player_q_defaults.get("seed"))
-    train_player.add_argument("--output", default=None)
-    train_player.add_argument("--learning-rate", type=float, default=player_q_defaults["learning_rate"])
-    train_player.add_argument("--gamma", type=float, default=player_q_defaults["gamma"])
-
-    train_player_dqn = subparsers.add_parser("train-player-dqn", help="Train the PyTorch DQN player.")
-    train_player_dqn.add_argument("--episodes", type=int, default=player_dqn_defaults["episodes"])
-    train_player_dqn.add_argument("--enemy", choices=enemy_choices, default=player_dqn_defaults["enemy"])
-    train_player_dqn.add_argument("--seed", type=int, default=player_dqn_defaults.get("seed"))
-    train_player_dqn.add_argument("--output", default=None)
-    train_player_dqn.add_argument("--learning-rate", type=float, default=player_dqn_defaults["learning_rate"])
-    train_player_dqn.add_argument("--gamma", type=float, default=player_dqn_defaults["gamma"])
-
-    train_enemy = subparsers.add_parser("train-enemy", help="Train the Q-model enemy.")
-    train_enemy.add_argument("--episodes", type=int, default=enemy_q_defaults["episodes"])
-    train_enemy.add_argument("--player", choices=player_choices, default=enemy_q_defaults["player"])
-    train_enemy.add_argument("--seed", type=int, default=enemy_q_defaults.get("seed"))
-    train_enemy.add_argument("--output", default=None)
-    train_enemy.add_argument("--learning-rate", type=float, default=enemy_q_defaults["learning_rate"])
-    train_enemy.add_argument("--gamma", type=float, default=enemy_q_defaults["gamma"])
-
-    train_enemy_dqn = subparsers.add_parser("train-enemy-dqn", help="Train the PyTorch DQN enemy.")
-    train_enemy_dqn.add_argument("--episodes", type=int, default=enemy_dqn_defaults["episodes"])
-    train_enemy_dqn.add_argument("--player", choices=player_choices, default=enemy_dqn_defaults["player"])
-    train_enemy_dqn.add_argument("--seed", type=int, default=enemy_dqn_defaults.get("seed"))
-    train_enemy_dqn.add_argument("--output", default=None)
-    train_enemy_dqn.add_argument("--learning-rate", type=float, default=enemy_dqn_defaults["learning_rate"])
-    train_enemy_dqn.add_argument("--gamma", type=float, default=enemy_dqn_defaults["gamma"])
+    _add_training_parser(
+        subparsers,
+        "train-player",
+        "Train the Q-model player.",
+        player_q_defaults,
+        opponent_argument="enemy",
+        opponent_choices=enemy_choices,
+    )
+    _add_training_parser(
+        subparsers,
+        "train-player-dqn",
+        "Train the PyTorch DQN player.",
+        player_dqn_defaults,
+        opponent_argument="enemy",
+        opponent_choices=enemy_choices,
+    )
+    _add_training_parser(
+        subparsers,
+        "train-enemy",
+        "Train the Q-model enemy.",
+        enemy_q_defaults,
+        opponent_argument="player",
+        opponent_choices=player_choices,
+    )
+    _add_training_parser(
+        subparsers,
+        "train-enemy-dqn",
+        "Train the PyTorch DQN enemy.",
+        enemy_dqn_defaults,
+        opponent_argument="player",
+        opponent_choices=player_choices,
+    )
 
     subparsers.add_parser("training-list", help="List timestamped training artifacts.")
 
@@ -94,4 +95,23 @@ def build_parser() -> argparse.ArgumentParser:
     training_tune.add_argument("--evaluation-episodes", type=int, default=None)
     training_tune.add_argument("--seed", type=int, default=None)
 
+    return parser
+
+
+def _add_training_parser(
+    subparsers: argparse._SubParsersAction,
+    command: str,
+    help_text: str,
+    defaults: dict,
+    *,
+    opponent_argument: str,
+    opponent_choices: list[str],
+) -> argparse.ArgumentParser:
+    parser = subparsers.add_parser(command, help=help_text)
+    parser.add_argument("--episodes", type=int, default=defaults["episodes"])
+    parser.add_argument(f"--{opponent_argument}", choices=opponent_choices, default=defaults[opponent_argument])
+    parser.add_argument("--seed", type=int, default=defaults.get("seed"))
+    parser.add_argument("--output", default=None)
+    parser.add_argument("--learning-rate", type=float, default=defaults["learning_rate"])
+    parser.add_argument("--gamma", type=float, default=defaults["gamma"])
     return parser

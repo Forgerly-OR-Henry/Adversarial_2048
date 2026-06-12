@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from config import get_train_defaults
@@ -233,21 +233,7 @@ def train_q_enemy(
         run_log_path=run_log_path,
     )
     if info_path is not None or published_path is not None:
-        summary = EnemyTrainingSummary(
-            episodes=summary.episodes,
-            output_path=summary.output_path,
-            average_player_score=summary.average_player_score,
-            average_player_max_tile=summary.average_player_max_tile,
-            best_suppressed_max_tile=summary.best_suppressed_max_tile,
-            latest_output_path=published_path,
-            info_path=info_path,
-            status=summary.status,
-            target_episodes=summary.target_episodes,
-            completed_episodes=summary.completed_episodes,
-            reference_model_path=summary.reference_model_path,
-            resume_run_path=summary.resume_run_path,
-            run_log_path=summary.run_log_path,
-        )
+        summary = replace(summary, latest_output_path=published_path, info_path=info_path)
     log_training_result(
         "enemy_q",
         parameters,

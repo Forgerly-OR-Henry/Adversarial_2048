@@ -25,6 +25,7 @@ from domain.train.artifacts import (
     list_training_artifacts,
     load_training_info,
     model_path_from_info,
+    replace_latest_model,
     training_info_status,
 )
 
@@ -336,13 +337,7 @@ def promote_training_result_to_latest(
     removed_previous_latest = latest_directory.exists()
     if removed_previous_latest:
         _ensure_safe_delete_path(latest_directory, allowed_roots, protected_roots, allow_latest=True)
-        if latest_directory.is_dir():
-            shutil.rmtree(latest_directory)
-        else:
-            latest_directory.unlink()
-
-    latest_directory.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source_model_path, latest_model_path)
+    removed_previous_latest = replace_latest_model(source_model_path, latest_model_path)
     return LatestPromotionSummary(
         training_type=training_type,
         source_model_path=source_model_path,

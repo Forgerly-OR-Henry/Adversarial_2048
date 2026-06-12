@@ -23,6 +23,7 @@ from ui.components import (
     create_text_entry,
     set_button_visual,
 )
+from ui.panels.shared import display_timestamp, make_grid_placer, unique_label
 from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import (
     ENEMY_LABELS,
@@ -84,19 +85,7 @@ class TrainingPanel:
 
     def _build(self, parent: ttk.Frame) -> None:
         training, area = create_area_panel(parent, "模型训练设置")
-
-        def place(
-            widget: tk.Misc,
-            row: int,
-            col: int,
-            rowspan: int = 1,
-            colspan: int = 1,
-            *,
-            sticky: str = "nsew",
-            padx: int = 6,
-            pady: int | None = None,
-        ) -> None:
-            area.grid_widget(widget, row, col, rowspan, colspan, sticky=sticky, padx=padx, pady=pady)
+        place = make_grid_placer(area)
 
         place(ttk.Label(training, text="训练对象"), 0, 0, colspan=3, sticky="w")
         place(
@@ -639,8 +628,8 @@ def build_training_panel(app: Any, parent: ttk.Frame) -> TrainingPanel:
 def _reference_option_map(training_type: str) -> dict[str, Path | None]:
     options: dict[str, Path | None] = {NO_REFERENCE_LABEL: None}
     for option in build_training_reference_options(training_type):
-        suffix = "latest" if option.status == "latest" else _display_timestamp(option.created_at)
-        label = _unique_option_label(
+        suffix = "latest" if option.status == "latest" else display_timestamp(option.created_at)
+        label = unique_label(
             options,
             f"{TRAINING_TYPE_LABELS.get(option.training_type, option.training_type)} | {suffix}",
         )
@@ -651,29 +640,16 @@ def _reference_option_map(training_type: str) -> dict[str, Path | None]:
 def _resume_option_map(training_type: str) -> dict[str, dict[str, Any] | None]:
     options: dict[str, dict[str, Any] | None] = {NO_RESUME_LABEL: None}
     for option in build_training_resume_options(training_type):
-        label = _unique_option_label(
+        label = unique_label(
             options,
             (
                 f"{TRAINING_TYPE_LABELS.get(option.training_type, option.training_type)} | "
                 f"未完成 {option.completed_episodes}/{option.target_episodes} | "
-                f"{_display_timestamp(option.created_at)}"
+                f"{display_timestamp(option.created_at)}"
             ),
         )
         options[label] = option.artifact
     return options
-
-
-def _unique_option_label(options: dict[str, object], base_label: str) -> str:
-    if base_label not in options:
-        return base_label
-    index = 2
-    while f"{base_label} #{index}" in options:
-        index += 1
-    return f"{base_label} #{index}"
-
-
-def _display_timestamp(value: str) -> str:
-    return value.replace("T", " ") if value else "unknown"
 
 
 __all__ = ["TrainingPanel", "build_training_panel"]
