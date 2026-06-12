@@ -4,8 +4,8 @@ import unittest
 
 import tests._path  # noqa: F401
 
-from game.constants import LEFT, RIGHT
-from game.rules import get_legal_actions, is_game_over, move
+from domain.game.constants import LEFT, RIGHT
+from domain.game.rules import get_legal_actions, is_game_over, move
 
 
 class RulesTest(unittest.TestCase):
@@ -31,6 +31,18 @@ class RulesTest(unittest.TestCase):
         result = move(board, LEFT)
         self.assertEqual(result.board[0], [4, 4, 0, 0])
         self.assertEqual(result.score_delta, 8)
+
+    def test_tiles_can_merge_above_2048(self):
+        board = [
+            [2048, 2048, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ]
+        result = move(board, LEFT)
+        self.assertTrue(result.moved)
+        self.assertEqual(result.board[0], [4096, 0, 0, 0])
+        self.assertEqual(result.score_delta, 4096)
 
     def test_invalid_move_does_not_change_board(self):
         board = [

@@ -7,15 +7,14 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from config import get_ui_defaults
-from game.constants import DOWN, LEFT, RIGHT, UP
-from results import compact_system_logs
-from ui.components.board_view import BoardView
-from ui.components.controls import create_action_button, create_select
+from domain.game.constants import DOWN, LEFT, RIGHT, UP
+from domain.results import compact_system_logs
+from ui.components import BoardView, create_action_button, create_select
 from ui.panels.evaluation import build_evaluation_panel
 from ui.panels.game import build_game_panel
 from ui.panels.training import build_training_panel
 from ui.panels.training_platform import build_training_platform_panel
-from ui.settings.layout import (
+from ui.settings.layout.base import (
     BOARD_GROUP_HEIGHT,
     BOARD_GROUP_WIDTH,
     BOARD_SCORE_BOTTOM_GAP,

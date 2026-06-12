@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 
-from game.constants import DOWN, LEFT, RIGHT, UP
+from domain.game.constants import DOWN, LEFT, RIGHT, UP
 from ui.settings.theme import BOARD_BG, CELL_BG, TILE_FONT_FAMILY
 
 
@@ -29,7 +29,19 @@ class BoardView(tk.Canvas):
         512: ("#edc850", "#f9f6f2"),
         1024: ("#edc53f", "#f9f6f2"),
         2048: ("#edc22e", "#f9f6f2"),
+        4096: ("#3c91e6", "#f9f6f2"),
+        8192: ("#2a9d8f", "#f9f6f2"),
+        16384: ("#8e5ea2", "#f9f6f2"),
+        32768: ("#d1495b", "#f9f6f2"),
+        65536: ("#6d597a", "#f9f6f2"),
     }
+    high_tile_palette = (
+        ("#3c91e6", "#f9f6f2"),
+        ("#2a9d8f", "#f9f6f2"),
+        ("#8e5ea2", "#f9f6f2"),
+        ("#d1495b", "#f9f6f2"),
+        ("#6d597a", "#f9f6f2"),
+    )
 
     def __init__(self, master: tk.Misc):
         super().__init__(
@@ -77,11 +89,26 @@ class BoardView(tk.Canvas):
         return (x1 + x2) // 2, (y1 + y2) // 2
 
     def _tile_font_size(self, value: int) -> int:
-        if value >= 10000:
+        digits = len(str(value))
+        if digits >= 7:
+            return 30
+        if digits >= 6:
+            return 34
+        if digits >= 5:
             return 38
-        if value >= 1000:
+        if digits >= 4:
             return 46
         return 60
+
+    @classmethod
+    def tile_color(cls, value: int) -> tuple[str, str]:
+        """返回方块颜色，2048 之后继续按高阶调色板循环。 / Return tile colors beyond 2048 too."""
+        if value in cls.tile_colors:
+            return cls.tile_colors[value]
+        if value > 2048:
+            palette_index = max(0, value.bit_length() - 13) % len(cls.high_tile_palette)
+            return cls.high_tile_palette[palette_index]
+        return "#3c3a32", "#f9f6f2"
 
     def _draw_background(self) -> None:
         self.delete("cell")
@@ -97,7 +124,7 @@ class BoardView(tk.Canvas):
     def _draw_tile(self, row: int, col: int, value: int, tag: str = "tile") -> tuple[int, int] | None:
         if value == 0:
             return None
-        bg, fg = self.tile_colors.get(value, ("#3c3a32", "#f9f6f2"))
+        bg, fg = self.tile_color(value)
         rect = self.create_rectangle(
             *self._cell_bounds(row, col),
             fill=bg,

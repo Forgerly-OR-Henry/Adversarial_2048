@@ -8,12 +8,12 @@ import sys
 from pathlib import Path
 
 from cli.formatters import json_ready
-from enemies import create_enemy
-from evaluation import compare_training_artifacts, run_experiment
-from game.board import format_board
-from game.env import GameEnv
-from players import HumanPlayer
-from train import (
+from domain.enemies import create_enemy
+from domain.evaluation import compare_training_artifacts, run_experiment
+from domain.game.board import format_board
+from domain.game.env import GameEnv
+from domain.players import HumanPlayer
+from domain.train import (
     list_training_artifacts,
     merge_training_artifacts,
     run_auto_tuning,

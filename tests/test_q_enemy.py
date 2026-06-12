@@ -6,10 +6,10 @@ from pathlib import Path
 
 import tests._path  # noqa: F401
 
-from enemies import create_enemy
-from game.env import GameEnv
-from models import EnemyQModel, get_legal_spawn_actions
-from train import train_q_enemy
+from domain.enemies import create_enemy
+from domain.game.env import GameEnv
+from domain.models import EnemyQModel, get_legal_spawn_actions
+from domain.train import train_q_enemy
 
 
 class QEnemyTest(unittest.TestCase):

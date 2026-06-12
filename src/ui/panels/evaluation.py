@@ -9,32 +9,30 @@ from queue import Empty, Queue
 from tkinter import ttk
 from typing import Any
 
-from evaluation import run_experiment
-from ui.components.controls import create_action_button, create_message_area, create_select, create_stepper, set_button_visual
-from ui.settings.layout import (
-    BUTTON_BAR_HEIGHT,
-    FIELD_ROW_HEIGHT,
-    FORM_FIELD_WIDTH,
-    FORM_HEIGHT,
-    FORM_LABEL_WIDTH,
-    FORM_SECOND_FIELD_WIDTH,
-    FORM_SECOND_LABEL_WIDTH,
-    FORM_WIDTH,
-    RUN_ACTION_BUTTON_WIDTH,
-    RUN_ACTION_GAP,
-    RUN_ACTION_PROGRESS_WIDTH,
-    RUN_ACTION_ROW_WIDTH,
-    lock_widget_size,
+from domain.evaluation import run_experiment
+from ui.components import (
+    GRID_CONTROL_OPTIONS,
+    create_action_button,
+    create_message_area,
+    create_select,
+    create_stepper,
+    create_text_entry,
+    set_button_visual,
 )
+from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import (
+    EVALUATION_TARGET_LABELS,
+    EVALUATION_TARGET_OPTIONS,
+    EVALUATION_TARGETS_BY_LABEL,
     ENEMY_LABELS,
+    ENEMY_TYPES_BY_LABEL,
+    NO_MODEL_LABEL,
     PLAYER_LABELS,
+    PLAYER_TYPES_BY_LABEL,
+    TRAINING_TYPE_LABELS,
 )
 from ui.settings.theme import BUTTON_BUSY, BUTTON_NORMAL
-from ui.panels.evaluation_options import (
-    EVALUATION_TARGET_LABELS,
-    EVALUATION_TARGETS_BY_LABEL,
-    NO_MODEL_LABEL,
+from workflows.evaluation import (
     EvaluationModelOption,
     SingleEvaluationRequest,
     build_automatic_enemy_options,
@@ -85,38 +83,47 @@ class EvaluationPanel:
         self.refresh_model_options()
 
     def _build(self, parent: ttk.Frame) -> None:
-        experiment = ttk.LabelFrame(parent, text="单项评估平台设置", width=FORM_WIDTH, height=FORM_HEIGHT, padding=16)
-        lock_widget_size(experiment, width=FORM_WIDTH, height=FORM_HEIGHT)
-        experiment.grid(row=0, column=0, sticky="nsew")
-        experiment.columnconfigure(0, weight=0, minsize=FORM_LABEL_WIDTH)
-        experiment.columnconfigure(1, weight=0, minsize=FORM_FIELD_WIDTH)
-        experiment.columnconfigure(2, weight=0, minsize=FORM_SECOND_LABEL_WIDTH)
-        experiment.columnconfigure(3, weight=0, minsize=FORM_SECOND_FIELD_WIDTH)
-        for row in range(4):
-            experiment.rowconfigure(row, weight=0, minsize=FIELD_ROW_HEIGHT)
-        experiment.rowconfigure(4, weight=0, minsize=BUTTON_BAR_HEIGHT + 16)
-        experiment.rowconfigure(5, weight=0, minsize=100)
+        experiment, area = create_area_panel(parent, "单项评估平台设置")
 
-        ttk.Label(experiment, text="评估对象").grid(row=0, column=0, sticky="w", padx=(0, 10), pady=7)
-        create_select(
-            experiment,
-            self.target_type,
-            tuple(EVALUATION_TARGET_LABELS.values()),
-            command=lambda _: self.refresh_model_options(),
-        ).grid(row=0, column=1, sticky="ew", pady=7)
+        def place(
+            widget: tk.Misc,
+            row: int,
+            col: int,
+            rowspan: int = 1,
+            colspan: int = 1,
+            *,
+            sticky: str = "nsew",
+            padx: int = 6,
+            pady: int | None = None,
+        ) -> None:
+            area.grid_widget(widget, row, col, rowspan, colspan, sticky=sticky, padx=padx, pady=pady)
 
-        ttk.Label(experiment, textvariable=self.opponent_label).grid(row=0, column=2, sticky="w", padx=(16, 10), pady=7)
-        self.opponent_select_host = ttk.Frame(experiment, style="Panel.TFrame", height=FIELD_ROW_HEIGHT - 14)
-        lock_widget_size(self.opponent_select_host, height=FIELD_ROW_HEIGHT - 14)
-        self.opponent_select_host.grid(row=0, column=3, sticky="ew", pady=7)
+        place(ttk.Label(experiment, text="评估对象"), 0, 0, colspan=3, sticky="w")
+        place(
+            create_select(
+                experiment,
+                self.target_type,
+                EVALUATION_TARGET_OPTIONS,
+                command=lambda _: self.refresh_model_options(),
+                **GRID_CONTROL_OPTIONS,
+            ),
+            0,
+            3,
+            colspan=7,
+        )
+
+        place(ttk.Label(experiment, textvariable=self.opponent_label), 0, 10, colspan=3, sticky="w")
+        self.opponent_select_host = ttk.Frame(experiment, style="Panel.TFrame")
         self.opponent_select_host.columnconfigure(0, weight=1)
+        self.opponent_select_host.rowconfigure(0, weight=1)
+        place(self.opponent_select_host, 0, 13, colspan=7)
 
-        ttk.Label(experiment, textvariable=self.model_label).grid(row=1, column=0, sticky="w", padx=(0, 10), pady=7)
-        self.model_select_host = ttk.Frame(experiment, style="Panel.TFrame", height=FIELD_ROW_HEIGHT - 14)
-        lock_widget_size(self.model_select_host, height=FIELD_ROW_HEIGHT - 14)
-        self.model_select_host.grid(row=1, column=1, columnspan=3, sticky="ew", pady=7)
+        place(ttk.Label(experiment, textvariable=self.model_label), 1, 0, colspan=3, sticky="w")
+        self.model_select_host = ttk.Frame(experiment, style="Panel.TFrame")
         self.model_select_host.columnconfigure(0, weight=1)
-        self.model_select_host.columnconfigure(1, weight=0, minsize=92)
+        self.model_select_host.columnconfigure(1, weight=0, minsize=96)
+        self.model_select_host.rowconfigure(0, weight=1)
+        place(self.model_select_host, 1, 3, colspan=17)
 
         refresh_button = create_action_button(
             self.model_select_host,
@@ -124,60 +131,39 @@ class EvaluationPanel:
             command=self.refresh_model_options,
             compact=True,
         )
-        refresh_button.configure(width=6)
         refresh_button.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
 
-        ttk.Label(experiment, text="局数").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=7)
-        create_stepper(
-            experiment,
-            self.episodes,
-            from_=1,
-            to=100000,
-            width=10,
-        ).grid(
-            row=2,
-            column=1,
-            sticky="ew",
-            pady=7,
+        place(ttk.Label(experiment, text="局数"), 2, 0, colspan=3, sticky="w")
+        place(
+            create_stepper(
+                experiment,
+                self.episodes,
+                from_=1,
+                to=100000,
+                width=10,
+                **GRID_CONTROL_OPTIONS,
+            ),
+            2,
+            3,
+            colspan=7,
         )
 
-        ttk.Label(experiment, text="随机种子").grid(row=2, column=2, sticky="w", padx=(16, 10), pady=7)
-        ttk.Entry(experiment, textvariable=self.seed).grid(row=2, column=3, sticky="ew", pady=7, ipady=2)
+        place(ttk.Label(experiment, text="随机种子"), 2, 10, colspan=3, sticky="w")
+        place(create_text_entry(experiment, self.seed, **GRID_CONTROL_OPTIONS), 2, 13, colspan=7)
 
-        ttk.Label(experiment, text="输出目录").grid(row=3, column=0, sticky="w", padx=(0, 10), pady=7)
-        ttk.Entry(experiment, textvariable=self.output).grid(
-            row=3,
-            column=1,
-            columnspan=3,
-            sticky="ew",
-            pady=7,
-            ipady=2,
-        )
+        place(ttk.Label(experiment, text="输出目录"), 3, 0, colspan=3, sticky="w")
+        place(create_text_entry(experiment, self.output, **GRID_CONTROL_OPTIONS), 3, 3, colspan=17)
 
-        action_row = ttk.Frame(experiment, style="Panel.TFrame", width=RUN_ACTION_ROW_WIDTH, height=BUTTON_BAR_HEIGHT)
-        lock_widget_size(action_row, width=RUN_ACTION_ROW_WIDTH, height=BUTTON_BAR_HEIGHT)
-        action_row.grid(row=4, column=0, columnspan=4, sticky="w", pady=(14, 0))
-        action_row.columnconfigure(0, weight=0, minsize=RUN_ACTION_BUTTON_WIDTH)
-        action_row.columnconfigure(1, weight=0, minsize=RUN_ACTION_GAP)
-        action_row.columnconfigure(2, weight=0, minsize=RUN_ACTION_PROGRESS_WIDTH)
-        action_row.rowconfigure(0, weight=0, minsize=BUTTON_BAR_HEIGHT)
-
-        self.button = create_action_button(action_row, text="运行单项评估", command=self.start)
-        self.button.grid(row=0, column=0, sticky="nsew")
+        self.button = create_action_button(experiment, text="运行单项评估", command=self.start)
+        place(self.button, 4, 0, colspan=5)
         self.progress_bar = ttk.Progressbar(
-            action_row,
+            experiment,
             variable=self.progress,
             maximum=100,
             mode="determinate",
         )
-        self.progress_bar.grid(row=0, column=2, sticky="ew")
-        create_message_area(experiment, self.status).grid(
-            row=5,
-            column=0,
-            columnspan=4,
-            sticky="ew",
-            pady=(12, 0),
-        )
+        place(self.progress_bar, 4, 5, colspan=15, sticky="ew")
+        place(create_message_area(experiment, self.status, **GRID_CONTROL_OPTIONS), 5, 0, rowspan=2, colspan=20)
 
     def start(self) -> None:
         if self.running:
@@ -207,7 +193,7 @@ class EvaluationPanel:
             self.status.set("请先选择一个可用的训练模型。")
             return
         try:
-            request = resolve_single_evaluation_request(selected_model, self.opponent_type.get())
+            request = resolve_single_evaluation_request(selected_model, self._opponent_type(selected_model.role))
         except KeyError:
             self.status.set("固定对手必须是完整算法或可默认加载的模型。")
             return
@@ -347,7 +333,7 @@ class EvaluationPanel:
         else:
             self.model_label.set("模型成果")
             options = [option for option in build_evaluation_model_options() if option.role == role]
-        self.model_options = {option.label: option for option in options}
+        self.model_options = _model_option_map(options)
         labels = tuple(self.model_options) or (NO_MODEL_LABEL,)
         if self.model_artifact.get() not in labels:
             self.model_artifact.set(labels[0])
@@ -358,8 +344,9 @@ class EvaluationPanel:
             self.model_artifact,
             labels,
             command=lambda _: self.refresh_output(),
+            **GRID_CONTROL_OPTIONS,
         )
-        self.model_select.grid(row=0, column=0, sticky="ew")
+        self.model_select.grid(row=0, column=0, sticky="nsew")
         self.refresh_output()
 
     def _sync_opponent_select(self, role: str) -> None:
@@ -381,8 +368,9 @@ class EvaluationPanel:
             self.opponent_type,
             values,
             command=command,
+            **GRID_CONTROL_OPTIONS,
         )
-        self.opponent_select.grid(row=0, column=0, sticky="ew")
+        self.opponent_select.grid(row=0, column=0, sticky="nsew")
 
     def _set_fixed_enemy(self, value: str) -> None:
         self.fixed_enemy_type.set(value)
@@ -400,15 +388,20 @@ class EvaluationPanel:
         selected_model = self._selected_model_option()
         if selected_model is None:
             role = EVALUATION_TARGETS_BY_LABEL[self.target_type.get()]
-            player_type, enemy_type = default_evaluation_pair_for_empty_selection(role, self.opponent_type.get())
+            player_type, enemy_type = default_evaluation_pair_for_empty_selection(role, self._opponent_type(role))
             return str(default_single_evaluation_output_directory(player_type, enemy_type))
-        request = resolve_single_evaluation_request(selected_model, self.opponent_type.get())
+        request = resolve_single_evaluation_request(selected_model, self._opponent_type(selected_model.role))
         player_type = request.player_type
         enemy_type = request.enemy_type
         return str(default_single_evaluation_output_directory(player_type, enemy_type))
 
     def _selected_model_option(self) -> EvaluationModelOption | None:
         return self.model_options.get(self.model_artifact.get())
+
+    def _opponent_type(self, role: str) -> str:
+        if role in ("player", "auto_player"):
+            return ENEMY_TYPES_BY_LABEL[self.opponent_type.get()]
+        return PLAYER_TYPES_BY_LABEL[self.opponent_type.get()]
 
     def _set_output(self, value: str) -> None:
         self._updating_output = True
@@ -427,12 +420,35 @@ def build_evaluation_panel(app: Any, parent: ttk.Frame) -> EvaluationPanel:
     return EvaluationPanel(app, parent, app.ui_defaults["experiment"], app.initial_enemy_type)
 
 
+def _model_option_map(options: list[EvaluationModelOption]) -> dict[str, EvaluationModelOption]:
+    labels: dict[str, EvaluationModelOption] = {}
+    for option in options:
+        labels[_unique_model_label(labels, _model_option_label(option))] = option
+    return labels
+
+
+def _model_option_label(option: EvaluationModelOption) -> str:
+    if option.role == "auto_player":
+        return PLAYER_LABELS[option.evaluation_type]
+    if option.role == "auto_enemy":
+        return ENEMY_LABELS[option.evaluation_type]
+    return f"{TRAINING_TYPE_LABELS[option.training_type]} | {_display_timestamp(option.created_at)}"
+
+
+def _unique_model_label(options: dict[str, EvaluationModelOption], base_label: str) -> str:
+    if base_label not in options:
+        return base_label
+    index = 2
+    while f"{base_label} #{index}" in options:
+        index += 1
+    return f"{base_label} #{index}"
+
+
+def _display_timestamp(value: str) -> str:
+    return value.replace("T", " ") if value else "unknown"
+
+
 __all__ = [
     "EvaluationPanel",
-    "build_automatic_enemy_options",
-    "build_automatic_player_options",
     "build_evaluation_panel",
-    "default_evaluation_pair_for_empty_selection",
-    "default_single_evaluation_output_directory",
-    "single_evaluation_output_csv_path",
 ]

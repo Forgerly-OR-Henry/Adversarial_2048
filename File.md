@@ -48,93 +48,98 @@ adversarial_2048/
 │   ├── config/                       # [已实现] 配置加载包
 │   │   └── __init__.py               # [已实现] YAML/简易 YAML 配置加载器，提供路径、训练、评估、UI 默认值
 │   │
-│   ├── game/                         # [已实现] 2048 游戏核心逻辑
-│   │   ├── __init__.py               # [已实现] 导出 GameEnv / GameState
-│   │   ├── board.py                  # [已实现] 棋盘创建、复制、空格、最大块、放置方块、格式化
-│   │   ├── constants.py              # [已实现] 棋盘大小、动作常量、默认出块概率
-│   │   ├── env.py                    # [已实现] GameEnv：reset、step、spawn、legal actions、snapshot
-│   │   ├── rules.py                  # [已实现] 移动合并规则、合法动作、结束判断、启发式评分
-│   │   └── state.py                  # [已实现] GameState：棋盘、分数、步数、结束状态
+│   ├── domain/                       # [已实现] 2048 领域层：规则、策略、模型、训练、评估和结果管理
+│   │   ├── __init__.py               # [已实现] domain 包标记
+│   │   ├── game/                     # [已实现] 2048 游戏核心逻辑
+│   │   │   ├── __init__.py           # [已实现] 导出 GameEnv / GameState
+│   │   │   ├── board.py              # [已实现] 棋盘创建、复制、空格、最大块、放置方块、格式化
+│   │   │   ├── constants.py          # [已实现] 棋盘大小、动作常量、默认出块概率
+│   │   │   ├── env.py                # [已实现] GameEnv：reset、step、spawn、legal actions、snapshot
+│   │   │   ├── rules.py              # [已实现] 移动合并规则、合法动作、结束判断、启发式评分
+│   │   │   └── state.py              # [已实现] GameState：棋盘、分数、步数、结束状态
+│   │   ├── players/                  # [已实现] 玩家策略
+│   │   │   ├── __init__.py           # [已实现] create_player 工厂
+│   │   │   ├── base_player.py        # [已实现] BasePlayer 接口
+│   │   │   ├── human_player.py       # [已实现] 命令行人类玩家输入
+│   │   │   ├── random_player.py      # [已实现] 随机合法动作玩家
+│   │   │   ├── heuristic_player.py   # [已实现] 启发式玩家
+│   │   │   ├── q_player.py           # [已实现] 轻量 Q-learning 玩家
+│   │   │   └── dqn_player.py         # [已实现] PyTorch 深度 DQN 玩家
+│   │   ├── enemies/                  # [已实现] 敌对出块策略
+│   │   │   ├── __init__.py           # [已实现] create_enemy 工厂
+│   │   │   ├── base_enemy.py         # [已实现] BaseEnemy 接口
+│   │   │   ├── random_enemy.py       # [已实现] RandomEnemy 标准随机敌人
+│   │   │   ├── greedy_enemy.py       # [已实现] 贪心敌人，枚举空格和 2/4 选择最坏局面
+│   │   │   ├── q_enemy.py            # [已实现] 轻量 Q-learning 敌人
+│   │   │   └── dqn_enemy.py          # [已实现] PyTorch 深度 DQN 敌人
+│   │   ├── models/                   # [已实现/待扩展] 模型定义和模型工具
+│   │   │   ├── __init__.py           # [已实现] 导出 Q-learning 模型和敌人动作映射
+│   │   │   ├── q_learning/           # [已实现] 轻量 Q-learning 模型包
+│   │   │   │   ├── __init__.py       # [已实现] 导出玩家/敌人 Q 模型
+│   │   │   │   ├── player.py         # [已实现] 纯标准库玩家线性 Q 模型
+│   │   │   │   └── enemy.py          # [已实现] 纯标准库敌人线性 Q 模型，32 个出块动作
+│   │   │   ├── torch_utils.py        # [已实现] PyTorch 检测、CUDA/CPU 设备选择
+│   │   │   └── dqn_network.py        # [已实现] PyTorch MLP DQN 网络
+│   │   ├── train/                    # [已实现/待扩展] 训练脚本目录
+│   │   │   ├── __init__.py           # [已实现] 导出 Q/DQN 训练入口，DQN 按需懒加载
+│   │   │   ├── artifacts.py          # [已实现] 训练产物命名、索引、元数据保存与查询
+│   │   │   ├── merge.py              # [已实现] Q-learning 训练产物合并与发布 latest
+│   │   │   ├── train_player_q.py     # [已实现] Q-learning 玩家训练循环
+│   │   │   ├── train_enemy_q.py      # [已实现] Q-learning 敌人训练循环
+│   │   │   ├── dqn_checkpoints.py    # [已实现] DQN checkpoint 和 state_dict 共享工具
+│   │   │   ├── replay_buffer.py      # [已实现] DQN 经验回放池
+│   │   │   ├── stability.py          # [已实现] DQN 稳定性控制、回滚、学习率调整配置
+│   │   │   ├── train_player_dqn.py   # [已实现] PyTorch DQN 玩家训练循环
+│   │   │   ├── train_enemy_dqn.py    # [已实现] PyTorch DQN 敌人训练循环
+│   │   │   └── tuning.py             # [已实现] 自动短轮调参与候选结果排序
+│   │   ├── evaluation/               # [已实现] 自动对局与实验运行
+│   │   │   ├── __init__.py           # [已实现] 导出 run_episode / run_experiment
+│   │   │   ├── compare.py            # [已实现] 训练产物识别、加载与横向评估比较
+│   │   │   ├── run_episode.py        # [已实现] 单局自动对战
+│   │   │   └── experiment.py         # [已实现] 多局实验、CSV 输出、GUI/CLI 共享进度回调
+│   │   └── results/                  # [已实现] 训练、评估和日志产物的统一管理服务
+│   │       ├── __init__.py           # [已实现] 导出结果列表、删除、日志压缩和 latest 发布接口
+│   │       └── management.py         # [已实现] 安全列出/删除产物、清理日志、设为 latest
 │   │
-│   ├── players/                      # [已实现] 玩家策略
-│   │   ├── __init__.py               # [已实现] create_player 工厂
-│   │   ├── base_player.py            # [已实现] BasePlayer 接口
-│   │   ├── human_player.py           # [已实现] 命令行人类玩家输入
-│   │   ├── random_player.py          # [已实现] 随机合法动作玩家
-│   │   ├── heuristic_player.py       # [已实现] 启发式玩家
-│   │   ├── q_player.py               # [已实现] 轻量 Q-learning 玩家
-│   │   └── dqn_player.py             # [已实现] PyTorch 深度 DQN 玩家
-│   │
-│   ├── enemies/                      # [已实现] 敌对出块策略
-│   │   ├── __init__.py               # [已实现] create_enemy 工厂
-│   │   ├── base_enemy.py             # [已实现] BaseEnemy 接口
-│   │   ├── random_enemy.py           # [已实现] RandomEnemy 标准随机敌人
-│   │   ├── greedy_enemy.py           # [已实现] 贪心敌人，枚举空格和 2/4 选择最坏局面
-│   │   ├── q_enemy.py                # [已实现] 轻量 Q-learning 敌人
-│   │   └── dqn_enemy.py              # [已实现] PyTorch 深度 DQN 敌人
-│   │
-│   ├── evaluation/                   # [已实现] 自动对局与实验运行
-│   │   ├── __init__.py               # [已实现] 导出 run_episode / run_experiment
-│   │   ├── compare.py                # [已实现] 训练产物识别、加载与横向评估比较
-│   │   ├── run_episode.py            # [已实现] 单局自动对战
-│   │   └── experiment.py             # [已实现] 多局实验、CSV 输出、GUI/CLI 共享进度回调
-│   │
-│   ├── results/                      # [已实现] 训练、评估和日志产物的统一管理服务
-│   │   ├── __init__.py               # [已实现] 导出结果列表、删除、日志压缩和 latest 发布接口
-│   │   └── management.py             # [已实现] 安全列出/删除产物、清理日志、设为 latest
+│   ├── workflows/                    # [已实现] UI 到训练/评估领域层之间的纯工作流适配工具
+│   │   ├── __init__.py               # [已实现] 工作流适配包
+│   │   ├── training.py               # [已实现] 训练参考/继续训练产物、参考类型 key 和输出路径解析
+│   │   └── evaluation.py             # [已实现] 单项评估选项、请求对象和输出路径解析
 │   │
 │   ├── ui/                           # [已实现] Tkinter 图形界面
 │   │   ├── __init__.py               # [已实现] 导出 App / BoardView / run_gui
 │   │   ├── app.py                    # [已实现] 主窗口装配、应用状态、面板切换、键盘绑定
-│   │   ├── components/               # [已实现] 可复用 UI 组件
-│   │   │   ├── __init__.py           # [已实现] 导出通用组件
+│   │   ├── components/               # [已实现] 可复用 UI 组件，按控件类型拆分
+│   │   │   ├── __init__.py           # [已实现] 包级导出棋盘、按钮、输入、消息区和栅格控件选项
 │   │   │   ├── board_view.py         # [已实现] 棋盘 Canvas 绘制与方块移动动画
-│   │   │   └── controls.py           # [已实现] 下拉框、步进器、按钮、消息区等控件构造
+│   │   │   ├── buttons.py            # [已实现] 操作按钮构造和按钮视觉状态切换
+│   │   │   ├── inputs.py             # [已实现] 下拉框、步进器、文本输入框和 GRID_CONTROL_OPTIONS
+│   │   │   ├── messages.py           # [已实现] 状态提示区和结果文本区构造
+│   │   │   └── controls.py           # [已实现] 兼容导出层，转发到 buttons/inputs/messages
 │   │   ├── panels/                   # [已实现] 主界面功能面板
 │   │   │   ├── __init__.py           # [已实现] 导出功能面板构造器
-│   │   │   ├── game.py               # [已实现] 对局控制面板
-│   │   │   ├── training.py           # [已实现] 模型训练面板
-│   │   │   ├── evaluation.py         # [已实现] 单项评估平台面板
-│   │   │   ├── training_options.py   # [已实现] 训练面板选项和输出路径解析
-│   │   │   ├── evaluation_options.py # [已实现] 评估面板选项、请求和输出路径解析
-│   │   │   └── training_platform.py  # [已实现] 训练平台：产物列表、合并、自动调参入口
-│   │   ├── settings/                 # [已实现] UI 主题、布局、选项配置
+│   │   │   ├── game.py               # [已实现] 对局控制面板，使用区域栅格布局
+│   │   │   ├── training.py           # [已实现] 模型训练面板，使用区域栅格布局并复用训练后端
+│   │   │   ├── evaluation.py         # [已实现] 单项评估平台面板，使用区域栅格布局
+│   │   │   └── training_platform.py  # [已实现] 训练平台：产物列表、合并、自动调参入口，使用区域栅格布局
+│   │   ├── settings/                 # [已实现] UI 主题、固定尺寸和选项配置
 │   │   │   ├── __init__.py           # [已实现] UI 配置包
-│   │   │   ├── layout.py             # [已实现] 固定窗口、棋盘、表单和控件布局尺寸
+│   │   │   ├── layout/               # [已实现] UI 布局基础尺寸和区域布局模板
+│   │   │   │   ├── __init__.py       # [已实现] 导出布局基础尺寸和栅格 helper
+│   │   │   │   ├── base.py           # [已实现] 全局窗口、棋盘、侧栏、表单尺寸和锁定尺寸工具
+│   │   │   │   └── grid.py           # [已实现] 20x9 区域栅格、坐标/跨度计算和统一面板创建
 │   │   │   ├── options.py            # [已实现] GUI 文案标签与内部类型映射
 │   │   │   └── theme.py              # [已实现] GUI 主题、颜色、字体、按钮样式、高 DPI 设置
 │   │   └── windows/                  # [已实现] 独立弹窗
 │   │       ├── __init__.py           # [已实现] 导出窗口构造器
 │   │       └── result_manager.py     # [已实现] 训练模型和评估结果管理窗口
 │   │
-│   ├── utils/                        # [已实现] 通用工具
-│   │   ├── __init__.py               # [已实现] 导出 recorder / seed / training_log
-│   │   ├── recorder.py               # [已实现] EpisodeRecord 和 ExperimentRecorder，保存 CSV
-│   │   ├── seed.py                   # [已实现] 随机种子工具
-│   │   ├── serialization.py          # [已实现] JSON/Path 清洗和 checkpoint 元数据转换
-│   │   └── training_log.py           # [已实现] 单次训练/评估成果日志与错误日志 JSONL 写入
-│   │
-│   ├── models/                       # [已实现/待扩展] 模型定义和模型工具
-│   │   ├── __init__.py               # [已实现] 导出 Q-learning 模型和敌人动作映射
-│   │   ├── q_learning/               # [已实现] 轻量 Q-learning 模型包
-│   │   │   ├── __init__.py           # [已实现] 导出玩家/敌人 Q 模型
-│   │   │   ├── player.py             # [已实现] 纯标准库玩家线性 Q 模型
-│   │   │   └── enemy.py              # [已实现] 纯标准库敌人线性 Q 模型，32 个出块动作
-│   │   ├── torch_utils.py            # [已实现] PyTorch 检测、CUDA/CPU 设备选择
-│   │   └── dqn_network.py            # [已实现] PyTorch MLP DQN 网络
-│   │
-│   └── train/                        # [已实现/待扩展] 训练脚本目录
-│       ├── __init__.py               # [已实现] 导出 Q/DQN 训练入口，DQN 按需懒加载
-│       ├── artifacts.py              # [已实现] 训练产物命名、索引、元数据保存与查询
-│       ├── merge.py                  # [已实现] Q-learning 训练产物合并与发布 latest
-│       ├── train_player_q.py         # [已实现] Q-learning 玩家训练循环
-│       ├── train_enemy_q.py          # [已实现] Q-learning 敌人训练循环
-│       ├── dqn_checkpoints.py        # [已实现] DQN checkpoint 和 state_dict 共享工具
-│       ├── replay_buffer.py          # [已实现] DQN 经验回放池
-│       ├── stability.py              # [已实现] DQN 稳定性控制、回滚、学习率调整配置
-│       ├── train_player_dqn.py       # [已实现] PyTorch DQN 玩家训练循环
-│       ├── train_enemy_dqn.py        # [已实现] PyTorch DQN 敌人训练循环
-│       └── tuning.py                 # [已实现] 自动短轮调参与候选结果排序
+│   └── utils/                        # [已实现] 通用工具
+│       ├── __init__.py               # [已实现] 导出 recorder / seed / training_log
+│       ├── recorder.py               # [已实现] EpisodeRecord 和 ExperimentRecorder，保存 CSV
+│       ├── seed.py                   # [已实现] 随机种子工具
+│       ├── serialization.py          # [已实现] JSON/Path 清洗和 checkpoint 元数据转换
+│       └── training_log.py           # [已实现] 单次训练/评估成果日志与错误日志 JSONL 写入
 │
 ├── tests/                            # [已实现] 标准库 unittest 测试
 │   ├── __init__.py                   # [已实现] tests 包标记

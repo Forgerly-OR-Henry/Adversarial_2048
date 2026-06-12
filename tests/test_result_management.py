@@ -7,7 +7,7 @@ from pathlib import Path
 
 import tests._path  # noqa: F401
 
-from results import (
+from domain.results import (
     ManagedResult,
     compact_managed_result_logs,
     compact_system_logs,
@@ -15,7 +15,7 @@ from results import (
     list_managed_results,
     promote_training_result_to_latest,
 )
-from train.artifacts import TRAINING_STATUS_INCOMPLETE
+from domain.train.artifacts import TRAINING_STATUS_INCOMPLETE
 
 
 class ResultManagementTest(unittest.TestCase):

@@ -7,15 +7,15 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Any
 
-from results import (
+from domain.results import (
     ManagedResult,
     compact_managed_result_logs,
     delete_managed_results,
     list_managed_results,
     promote_training_result_to_latest,
 )
-from train.artifacts import TRAINING_STATUS_INCOMPLETE
-from ui.components.controls import create_action_button
+from domain.train.artifacts import TRAINING_STATUS_INCOMPLETE
+from ui.components import create_action_button
 from ui.settings.theme import BORDER, FONT_FAMILY, MUTED, PANEL_BG, TEXT
 
 

@@ -8,28 +8,19 @@ from queue import Empty, Queue
 from typing import Any
 from tkinter import ttk
 
-from evaluation import compare_training_artifacts
-from train import list_training_artifacts, merge_training_artifacts, run_auto_tuning
-from train.artifacts import TRAINING_MODEL_FILENAMES, latest_training_output_path
-from ui.components.controls import (
+from domain.evaluation import compare_training_artifacts
+from domain.train import list_training_artifacts, merge_training_artifacts, run_auto_tuning
+from domain.train.artifacts import TRAINING_MODEL_FILENAMES, latest_training_output_path
+from ui.components import (
+    GRID_CONTROL_OPTIONS,
     create_action_button,
     create_message_area,
     create_select,
     create_stepper,
+    create_text_entry,
     set_button_visual,
 )
-from ui.settings.layout import (
-    BUTTON_BAR_HEIGHT,
-    FIELD_ROW_HEIGHT,
-    FORM_HEIGHT,
-    FORM_FIELD_WIDTH,
-    FORM_LABEL_WIDTH,
-    FORM_SECOND_FIELD_WIDTH,
-    FORM_SECOND_LABEL_WIDTH,
-    FORM_WIDTH,
-    TRAINING_PLATFORM_RESULT_HEIGHT,
-    lock_widget_size,
-)
+from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import TRAINING_ALGORITHM_LABELS, TRAINING_TARGET_LABELS, TRAINING_TYPE_LABELS
 from ui.settings.theme import BUTTON_BUSY, BUTTON_NORMAL
 from utils.training_log import log_error
@@ -110,92 +101,83 @@ class TrainingPlatformPanel:
         self._build(parent)
 
     def _build(self, parent: ttk.Frame) -> None:
-        self.platform = ttk.LabelFrame(
-            parent,
-            text="训练智能评估平台",
-            width=FORM_WIDTH,
-            height=FORM_HEIGHT,
-            padding=16,
+        self.platform, self._area_grid = create_area_panel(parent, "训练智能评估平台")
+
+        def place(
+            widget: tk.Misc,
+            row: int,
+            col: int,
+            rowspan: int = 1,
+            colspan: int = 1,
+            *,
+            sticky: str = "nsew",
+            padx: int = 6,
+            pady: int | None = None,
+        ) -> None:
+            self._area_grid.grid_widget(widget, row, col, rowspan, colspan, sticky=sticky, padx=padx, pady=pady)
+
+        place(ttk.Label(self.platform, text="训练成果 A"), 0, 0, colspan=3, sticky="w")
+        self.artifact_a_select = create_select(
+            self.platform,
+            self.artifact_a,
+            tuple(self._artifact_values()),
+            **GRID_CONTROL_OPTIONS,
         )
-        lock_widget_size(self.platform, width=FORM_WIDTH, height=FORM_HEIGHT)
-        self.platform.grid(row=0, column=0, sticky="nsew")
-        self.platform.columnconfigure(0, weight=0, minsize=FORM_LABEL_WIDTH)
-        self.platform.columnconfigure(1, weight=0, minsize=FORM_FIELD_WIDTH)
-        self.platform.columnconfigure(2, weight=0, minsize=FORM_SECOND_LABEL_WIDTH)
-        self.platform.columnconfigure(3, weight=0, minsize=FORM_SECOND_FIELD_WIDTH)
-        for row in range(4):
-            self.platform.rowconfigure(row, weight=0, minsize=FIELD_ROW_HEIGHT)
-        self.platform.rowconfigure(4, weight=0, minsize=BUTTON_BAR_HEIGHT + 16)
-        self.platform.rowconfigure(5, weight=0, minsize=34)
-        self.platform.rowconfigure(6, weight=0, minsize=64)
-        self.platform.rowconfigure(7, weight=0, minsize=TRAINING_PLATFORM_RESULT_HEIGHT)
+        place(self.artifact_a_select, 0, 3, colspan=17)
 
-        ttk.Label(self.platform, text="训练成果 A").grid(row=0, column=0, sticky="w", padx=(0, 10), pady=7)
-        self.artifact_a_select = create_select(self.platform, self.artifact_a, tuple(self._artifact_values()))
-        self.artifact_a_select.grid(row=0, column=1, columnspan=3, sticky="ew", pady=7)
-
-        ttk.Label(self.platform, text="训练成果 B").grid(row=1, column=0, sticky="w", padx=(0, 10), pady=7)
-        self.artifact_b_select = create_select(self.platform, self.artifact_b, tuple(self._artifact_values()))
-        self.artifact_b_select.grid(row=1, column=1, columnspan=3, sticky="ew", pady=7)
-
-        ttk.Label(self.platform, text="评估局数").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=7)
-        create_stepper(self.platform, self.episodes, from_=1, to=100000, width=10).grid(
-            row=2,
-            column=1,
-            sticky="ew",
-            pady=7,
+        place(ttk.Label(self.platform, text="训练成果 B"), 1, 0, colspan=3, sticky="w")
+        self.artifact_b_select = create_select(
+            self.platform,
+            self.artifact_b,
+            tuple(self._artifact_values()),
+            **GRID_CONTROL_OPTIONS,
         )
-        ttk.Label(self.platform, text="随机种子").grid(row=2, column=2, sticky="w", padx=(16, 10), pady=7)
-        ttk.Entry(self.platform, textvariable=self.seed).grid(row=2, column=3, sticky="ew", pady=7, ipady=2)
+        place(self.artifact_b_select, 1, 3, colspan=17)
 
-        ttk.Label(self.platform, text="调参对象").grid(row=3, column=0, sticky="w", padx=(0, 10), pady=7)
-        create_select(self.platform, self.target, tuple(TRAINING_TARGET_LABELS.values())).grid(
-            row=3,
-            column=1,
-            sticky="ew",
-            pady=7,
+        place(ttk.Label(self.platform, text="评估局数"), 2, 0, colspan=3, sticky="w")
+        place(
+            create_stepper(self.platform, self.episodes, from_=1, to=100000, width=10, **GRID_CONTROL_OPTIONS),
+            2,
+            3,
+            colspan=7,
         )
-        ttk.Label(self.platform, text="调参算法").grid(row=3, column=2, sticky="w", padx=(16, 10), pady=7)
-        create_select(self.platform, self.algorithm, tuple(TRAINING_ALGORITHM_LABELS.values())).grid(
-            row=3,
-            column=3,
-            sticky="ew",
-            pady=7,
+        place(ttk.Label(self.platform, text="随机种子"), 2, 10, colspan=3, sticky="w")
+        place(create_text_entry(self.platform, self.seed, **GRID_CONTROL_OPTIONS), 2, 13, colspan=7)
+
+        place(ttk.Label(self.platform, text="调参对象"), 3, 0, colspan=3, sticky="w")
+        place(
+            create_select(self.platform, self.target, tuple(TRAINING_TARGET_LABELS.values()), **GRID_CONTROL_OPTIONS),
+            3,
+            3,
+            colspan=7,
+        )
+        place(ttk.Label(self.platform, text="调参算法"), 3, 10, colspan=3, sticky="w")
+        place(
+            create_select(
+                self.platform,
+                self.algorithm,
+                tuple(TRAINING_ALGORITHM_LABELS.values()),
+                **GRID_CONTROL_OPTIONS,
+            ),
+            3,
+            13,
+            colspan=7,
         )
 
-        button_bar = ttk.Frame(self.platform, style="Panel.TFrame", height=BUTTON_BAR_HEIGHT)
-        lock_widget_size(button_bar, height=BUTTON_BAR_HEIGHT)
-        button_bar.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(14, 0))
-        button_bar.rowconfigure(0, weight=1)
-        for column in range(4):
-            button_bar.columnconfigure(column, weight=1, uniform="training_platform_actions")
-
-        compare_button = create_action_button(button_bar, text="比较 A/B", command=lambda: self.start("compare"))
-        merge_button = create_action_button(button_bar, text="合并 A/B", command=lambda: self.start("merge"))
-        tune_button = create_action_button(button_bar, text="自动调参试跑", command=lambda: self.start("tune"))
-        refresh_button = create_action_button(button_bar, text="刷新成果", command=self._reload_selects)
+        compare_button = create_action_button(self.platform, text="比较 A/B", command=lambda: self.start("compare"))
+        merge_button = create_action_button(self.platform, text="合并 A/B", command=lambda: self.start("merge"))
+        tune_button = create_action_button(self.platform, text="自动调参试跑", command=lambda: self.start("tune"))
+        refresh_button = create_action_button(self.platform, text="刷新成果", command=self._reload_selects)
         self.buttons = [compare_button, merge_button, tune_button, refresh_button]
-        compare_button.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
-        merge_button.grid(row=0, column=1, sticky="nsew", padx=6)
-        tune_button.grid(row=0, column=2, sticky="nsew", padx=6)
-        refresh_button.grid(row=0, column=3, sticky="nsew", padx=(6, 0))
+        place(compare_button, 4, 0, colspan=5)
+        place(merge_button, 4, 5, colspan=5)
+        place(tune_button, 4, 10, colspan=5)
+        place(refresh_button, 4, 15, colspan=5)
 
         self.progress_bar = ttk.Progressbar(self.platform, variable=self.progress, maximum=100, mode="determinate")
-        self.progress_bar.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(14, 0))
-        create_message_area(self.platform, self.status, height=58).grid(
-            row=6,
-            column=0,
-            columnspan=4,
-            sticky="ew",
-            pady=(12, 0),
-        )
-        create_message_area(self.platform, self.result, height=TRAINING_PLATFORM_RESULT_HEIGHT).grid(
-            row=7,
-            column=0,
-            columnspan=4,
-            sticky="ew",
-            pady=(10, 0),
-        )
+        place(self.progress_bar, 5, 0, colspan=20, sticky="ew")
+        place(create_message_area(self.platform, self.status, **GRID_CONTROL_OPTIONS), 6, 0, colspan=20)
+        place(create_message_area(self.platform, self.result, **GRID_CONTROL_OPTIONS), 7, 0, rowspan=2, colspan=20)
 
     def start(self, action: str) -> None:
         if self.running:
@@ -316,10 +298,20 @@ class TrainingPlatformPanel:
         self._refresh_artifacts()
         self.artifact_a_select.destroy()
         self.artifact_b_select.destroy()
-        self.artifact_a_select = create_select(self.platform, self.artifact_a, tuple(self._artifact_values()))
-        self.artifact_a_select.grid(row=0, column=1, columnspan=3, sticky="ew", pady=7)
-        self.artifact_b_select = create_select(self.platform, self.artifact_b, tuple(self._artifact_values()))
-        self.artifact_b_select.grid(row=1, column=1, columnspan=3, sticky="ew", pady=7)
+        self.artifact_a_select = create_select(
+            self.platform,
+            self.artifact_a,
+            tuple(self._artifact_values()),
+            **GRID_CONTROL_OPTIONS,
+        )
+        self._area_grid.grid_widget(self.artifact_a_select, 0, 3, colspan=17)
+        self.artifact_b_select = create_select(
+            self.platform,
+            self.artifact_b,
+            tuple(self._artifact_values()),
+            **GRID_CONTROL_OPTIONS,
+        )
+        self._area_grid.grid_widget(self.artifact_b_select, 1, 3, colspan=17)
 
     def _artifact_values(self) -> list[str]:
         return list(self.artifact_labels.keys()) or [NO_ARTIFACT_LABEL]

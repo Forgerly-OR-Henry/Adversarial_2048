@@ -6,10 +6,10 @@ from pathlib import Path
 
 import tests._path  # noqa: F401
 
-from game.env import GameEnv
-from models import LinearQModel
-from players import create_player
-from train import train_q_player
+from domain.game.env import GameEnv
+from domain.models import LinearQModel
+from domain.players import create_player
+from domain.train import train_q_player
 
 
 class QPlayerTest(unittest.TestCase):

@@ -5,15 +5,15 @@ import unittest
 
 import tests._path  # noqa: F401
 
-from enemies.greedy_enemy import GreedyEnemy
-from enemies import create_enemy
-from enemies.q_enemy import QEnemy
-from enemies.random_enemy import RandomEnemy
-from game.board import get_empty_cells
-from game.env import GameEnv
-from players import create_player
-from players.heuristic_player import HeuristicPlayer
-from players.random_player import RandomPlayer
+from domain.enemies.greedy_enemy import GreedyEnemy
+from domain.enemies import create_enemy
+from domain.enemies.q_enemy import QEnemy
+from domain.enemies.random_enemy import RandomEnemy
+from domain.game.board import get_empty_cells
+from domain.game.env import GameEnv
+from domain.players import create_player
+from domain.players.heuristic_player import HeuristicPlayer
+from domain.players.random_player import RandomPlayer
 
 
 class StrategyTest(unittest.TestCase):

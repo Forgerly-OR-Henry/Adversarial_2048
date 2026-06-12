@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import re
 import tempfile
@@ -19,10 +20,10 @@ from config import (
     get_train_defaults,
     get_training_results_log_path,
 )
-from evaluation import compare_training_artifacts, run_episode
-from models import LinearQModel
-from models.torch_utils import checkpoint_metadata, load_torch_checkpoint
-from train.artifacts import (
+from domain.evaluation import compare_training_artifacts, run_episode
+from domain.models import LinearQModel
+from domain.models.torch_utils import checkpoint_metadata, load_torch_checkpoint
+from domain.train.artifacts import (
     TRAINING_STATUS_INCOMPLETE,
     list_incomplete_training_artifacts,
     load_training_info,
@@ -30,11 +31,18 @@ from train.artifacts import (
     training_info_status,
     training_timestamp,
 )
-from train.merge import merge_training_artifacts
-from train.tuning import generate_tuning_candidates
-from train.train_player_q import train_q_player
-from ui.panels.evaluation_options import (
+from domain.train.merge import merge_training_artifacts
+from domain.train.tuning import generate_tuning_candidates
+from domain.train.train_player_q import train_q_player
+from ui.components import GRID_CONTROL_OPTIONS as EXPORTED_GRID_CONTROL_OPTIONS
+from ui.components.controls import GRID_CONTROL_OPTIONS as COMPAT_GRID_CONTROL_OPTIONS
+from ui.components.inputs import GRID_CONTROL_OPTIONS as INPUT_GRID_CONTROL_OPTIONS
+from ui.settings.options import (
     EVALUATION_TARGET_LABELS,
+    REFERENCE_TYPE_OPTIONS as REFERENCE_TYPE_LABEL_OPTIONS,
+)
+from workflows.evaluation import (
+    EVALUATION_TARGETS,
     EvaluationModelOption,
     build_automatic_enemy_options,
     build_automatic_player_options,
@@ -46,7 +54,7 @@ from ui.panels.evaluation_options import (
     training_type_role,
 )
 from ui.panels.training_platform import build_training_artifact_labels
-from ui.panels.training_options import (
+from workflows.training import (
     REFERENCE_TYPE_INITIAL_WEIGHTS,
     REFERENCE_TYPE_OPTIONS,
     build_training_reference_options,
@@ -54,6 +62,7 @@ from ui.panels.training_options import (
     default_training_output_directory,
     training_output_model_path,
 )
+from ui.settings.layout.grid import AreaGridSpec
 
 
 def _contains_windows_absolute_path(value) -> bool:
@@ -104,10 +113,10 @@ class TrainingPlatformTest(unittest.TestCase):
 
     def test_legacy_latest_output_field_is_rejected(self):
         with patch(
-            "train.artifacts.get_train_defaults",
+            "domain.train.artifacts.get_train_defaults",
             return_value={"runs_directory": "models/q_learning/player", "latest_output": "legacy/player_q_model.json"},
         ):
-            from train.artifacts import latest_training_output_path
+            from domain.train.artifacts import latest_training_output_path
 
             with self.assertRaises(KeyError):
                 latest_training_output_path("player_q")
@@ -134,6 +143,91 @@ class TrainingPlatformTest(unittest.TestCase):
 
     def test_reference_type_extension_only_enables_initial_weights(self):
         self.assertEqual(REFERENCE_TYPE_OPTIONS, (REFERENCE_TYPE_INITIAL_WEIGHTS,))
+        self.assertNotIn("distillation", REFERENCE_TYPE_OPTIONS)
+        self.assertEqual(REFERENCE_TYPE_LABEL_OPTIONS, ("起始权重",))
+        self.assertNotIn("蒸馏", REFERENCE_TYPE_LABEL_OPTIONS)
+
+    def test_workflow_modules_do_not_import_ui_package(self):
+        for path in Path("src/workflows").glob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            modules = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    modules.extend(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    modules.append(node.module)
+            self.assertFalse(
+                any(module == "ui" or module.startswith("ui.") for module in modules),
+                f"{path} should not import ui.*",
+            )
+
+    def test_area_grid_place_returns_tk_grid_coordinates(self):
+        grid = AreaGridSpec(columns=20, rows=9, width=930, height=610)
+
+        self.assertEqual(
+            grid.place(row=2, col=3, rowspan=2, colspan=7),
+            {"row": 2, "column": 3, "rowspan": 2, "columnspan": 7},
+        )
+
+    def test_area_grid_place_from_to_uses_exclusive_bounds(self):
+        grid = AreaGridSpec(columns=20, rows=9, width=930, height=610)
+
+        self.assertEqual(
+            grid.place_from_to(row=3, col=13, to_row=4, to_col=16),
+            {"row": 3, "column": 13, "rowspan": 1, "columnspan": 3},
+        )
+
+    def test_area_grid_rejects_invalid_coordinates(self):
+        grid = AreaGridSpec(columns=20, rows=9, width=930, height=610)
+
+        with self.assertRaises(ValueError):
+            grid.place(row=0, col=0, rowspan=0, colspan=1)
+        with self.assertRaises(ValueError):
+            grid.place(row=8, col=19, rowspan=2, colspan=1)
+        with self.assertRaises(ValueError):
+            grid.place_from_to(row=4, col=5, to_row=4, to_col=8)
+        with self.assertRaises(ValueError):
+            grid.place_from_to(row=4, col=5, to_row=6, to_col=4)
+
+    def test_area_grid_size_distribution_matches_total_size(self):
+        grid = AreaGridSpec(columns=20, rows=9, width=931, height=613)
+
+        self.assertEqual(sum(grid.column_sizes()), 931)
+        self.assertEqual(sum(grid.row_sizes()), 613)
+        self.assertEqual(len(grid.column_sizes()), 20)
+        self.assertEqual(len(grid.row_sizes()), 9)
+        self.assertEqual(grid.padding(2, 1), (9, 6))
+
+    def test_area_grid_widget_uses_default_ten_percent_vertical_padding(self):
+        class FakeWidget:
+            def __init__(self):
+                self.kwargs = {}
+
+            def grid(self, **kwargs):
+                self.kwargs = kwargs
+
+        widget = FakeWidget()
+        grid = AreaGridSpec(columns=20, rows=9, width=900, height=450)
+
+        grid.grid_widget(widget, row=1, col=3, rowspan=2, colspan=7, sticky="ew")
+
+        self.assertEqual(
+            widget.kwargs,
+            {
+                "row": 1,
+                "column": 3,
+                "rowspan": 2,
+                "columnspan": 7,
+                "sticky": "ew",
+                "padx": 6,
+                "pady": 10,
+            },
+        )
+
+    def test_grid_control_options_are_shared_exports(self):
+        self.assertIs(EXPORTED_GRID_CONTROL_OPTIONS, INPUT_GRID_CONTROL_OPTIONS)
+        self.assertIs(COMPAT_GRID_CONTROL_OPTIONS, INPUT_GRID_CONTROL_OPTIONS)
+        self.assertEqual(INPUT_GRID_CONTROL_OPTIONS, {"fixed_height": False})
 
     def test_gui_single_evaluation_output_field_is_directory_only(self):
         output_directory = default_single_evaluation_output_directory("q_ai", "random")
@@ -359,10 +453,10 @@ class TrainingPlatformTest(unittest.TestCase):
                 reference_options = build_training_reference_options("player_q")
                 resume_options = build_training_resume_options("player_q")
 
-                self.assertTrue(any(value == reference for value in reference_options.values()))
-                self.assertFalse(any(value == incomplete for value in reference_options.values()))
-                self.assertEqual(len([value for value in resume_options.values() if value is not None]), 1)
-                resume_artifact = next(value for value in resume_options.values() if value is not None)
+                self.assertTrue(any(option.path == reference for option in reference_options))
+                self.assertFalse(any(option.path == incomplete for option in reference_options))
+                self.assertEqual(len(resume_options), 1)
+                resume_artifact = resume_options[0].artifact
                 self.assertEqual(Path(resume_artifact["reference_model_path"]), reference)
 
     def test_resume_with_deleted_previous_reference_keeps_reference_empty(self):
@@ -397,8 +491,8 @@ class TrainingPlatformTest(unittest.TestCase):
                     resume_run_path=stopped.output_path.parent,
                 )
 
-                self.assertFalse(any(value == stopped.output_path for value in reference_options.values()))
-                self.assertFalse(any(value == missing_reference for value in reference_options.values()))
+                self.assertFalse(any(option.path == stopped.output_path for option in reference_options))
+                self.assertFalse(any(option.path == missing_reference for option in reference_options))
                 self.assertIsNone(resumed.reference_model_path)
                 resumed_info = load_training_info(resumed.output_path)
                 self.assertIsNotNone(resumed_info)
@@ -449,7 +543,7 @@ class TrainingPlatformTest(unittest.TestCase):
 
                 self.assertIsNone(load_training_info(run_dir))
                 self.assertEqual(incomplete, [])
-                self.assertEqual(len([value for value in resume_options.values() if value is not None]), 0)
+                self.assertEqual(len(resume_options), 0)
 
     def test_dqn_stop_writes_incomplete_artifact_when_torch_is_available(self):
         try:
@@ -457,7 +551,7 @@ class TrainingPlatformTest(unittest.TestCase):
         except ModuleNotFoundError:
             self.skipTest("PyTorch is not installed.")
 
-        from train import train_dqn_player
+        from domain.train import train_dqn_player
 
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp_dir:
             runs_root = Path(temp_dir) / "dqn_runs"
@@ -496,7 +590,7 @@ class TrainingPlatformTest(unittest.TestCase):
         except ModuleNotFoundError:
             self.skipTest("PyTorch is not installed.")
 
-        from train import train_dqn_player
+        from domain.train import train_dqn_player
 
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp_dir:
             runs_root = Path(temp_dir) / "dqn_runs"
@@ -578,7 +672,7 @@ class TrainingPlatformTest(unittest.TestCase):
                 defaults["latest_output_directory"] = str(latest_root)
             return defaults
 
-        with patch("train.artifacts.get_train_defaults", side_effect=fake_get_train_defaults):
+        with patch("domain.train.artifacts.get_train_defaults", side_effect=fake_get_train_defaults):
             yield original_defaults
 
     @staticmethod
@@ -674,6 +768,7 @@ class TrainingPlatformTest(unittest.TestCase):
         self.assertEqual(training_type_evaluation_type("enemy_dqn"), "dqn_enemy")
 
     def test_single_evaluation_target_order_starts_with_automatic_options(self):
+        self.assertEqual(EVALUATION_TARGETS, ("auto_player", "player", "auto_enemy", "enemy"))
         self.assertEqual(
             tuple(EVALUATION_TARGET_LABELS.values()),
             ("自动玩家", "玩家模型", "自动敌人", "敌对模型"),
@@ -681,38 +776,36 @@ class TrainingPlatformTest(unittest.TestCase):
 
     def test_single_evaluation_default_pair_supports_automatic_targets(self):
         self.assertEqual(
-            default_evaluation_pair_for_empty_selection("auto_player", "随机敌人"),
+            default_evaluation_pair_for_empty_selection("auto_player", "random"),
             ("heuristic", "random"),
         )
         self.assertEqual(
-            default_evaluation_pair_for_empty_selection("auto_enemy", "启发式玩家"),
+            default_evaluation_pair_for_empty_selection("auto_enemy", "heuristic"),
             ("heuristic", "random"),
         )
 
     def test_single_evaluation_request_uses_only_selected_model_path(self):
         player_option = EvaluationModelOption(
-            label="player",
             path=Path("models/q_learning/player/20260610/player_q_model.json"),
             training_type="player_q",
             role="player",
             evaluation_type="q_ai",
             created_at="20260610",
         )
-        player_request = resolve_single_evaluation_request(player_option, "随机敌人")
+        player_request = resolve_single_evaluation_request(player_option, "random")
         self.assertEqual(player_request.player_type, "q_ai")
         self.assertEqual(player_request.enemy_type, "random")
         self.assertEqual(player_request.player_model_path, player_option.path)
         self.assertIsNone(player_request.enemy_model_path)
 
         enemy_option = EvaluationModelOption(
-            label="enemy",
             path=Path("models/dqn/enemy/20260610/enemy_dqn_model.pt"),
             training_type="enemy_dqn",
             role="enemy",
             evaluation_type="dqn_enemy",
             created_at="20260610",
         )
-        enemy_request = resolve_single_evaluation_request(enemy_option, "启发式玩家")
+        enemy_request = resolve_single_evaluation_request(enemy_option, "heuristic")
         self.assertEqual(enemy_request.player_type, "heuristic")
         self.assertEqual(enemy_request.enemy_type, "dqn_enemy")
         self.assertIsNone(enemy_request.player_model_path)
@@ -720,13 +813,13 @@ class TrainingPlatformTest(unittest.TestCase):
 
     def test_single_evaluation_can_run_automatic_player_options(self):
         options = build_automatic_player_options()
-        labels = [option.label for option in options]
+        player_types = [option.evaluation_type for option in options]
 
-        self.assertEqual(labels, ["启发式玩家", "轻量 Q 玩家", "深度 DQN 玩家"])
+        self.assertEqual(player_types, ["heuristic", "q_ai", "dqn_player"])
         heuristic = options[0]
         q_latest = options[1]
-        heuristic_request = resolve_single_evaluation_request(heuristic, "贪心敌人")
-        q_latest_request = resolve_single_evaluation_request(q_latest, "随机敌人")
+        heuristic_request = resolve_single_evaluation_request(heuristic, "greedy")
+        q_latest_request = resolve_single_evaluation_request(q_latest, "random")
 
         self.assertEqual(heuristic_request.player_type, "heuristic")
         self.assertEqual(heuristic_request.enemy_type, "greedy")
@@ -737,13 +830,13 @@ class TrainingPlatformTest(unittest.TestCase):
 
     def test_single_evaluation_can_run_automatic_enemy_options(self):
         options = build_automatic_enemy_options()
-        labels = [option.label for option in options]
+        enemy_types = [option.evaluation_type for option in options]
 
-        self.assertEqual(labels, ["随机敌人", "贪心敌人", "轻量 Q 敌人", "深度 DQN 敌人"])
+        self.assertEqual(enemy_types, ["random", "greedy", "q_enemy", "dqn_enemy"])
         greedy = options[1]
         q_latest = options[2]
-        greedy_request = resolve_single_evaluation_request(greedy, "启发式玩家")
-        q_latest_request = resolve_single_evaluation_request(q_latest, "随机玩家")
+        greedy_request = resolve_single_evaluation_request(greedy, "heuristic")
+        q_latest_request = resolve_single_evaluation_request(q_latest, "random")
 
         self.assertEqual(greedy_request.player_type, "heuristic")
         self.assertEqual(greedy_request.enemy_type, "greedy")

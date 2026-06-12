@@ -12,10 +12,10 @@ import tests._path  # noqa: F401
 
 from cli.commands import run_auto
 from cli.parser import build_parser
-from evaluation import default_experiment_path, run_episode, run_experiment
+from domain.evaluation import default_experiment_path, run_episode, run_experiment
 from ui.settings.options import PLAYER_LABELS, PLAYER_TYPES_BY_LABEL, TRAINING_ALGORITHM_LABELS
-from players.heuristic_player import HeuristicPlayer
-from players import create_player
+from domain.players.heuristic_player import HeuristicPlayer
+from domain.players import create_player
 from utils import ExperimentRecorder
 
 

@@ -9,42 +9,35 @@ from pathlib import Path
 from typing import Any
 from tkinter import ttk
 
-from train import train_dqn_enemy, train_dqn_player, train_q_enemy, train_q_player
-from train.artifacts import (
+from domain.train import train_dqn_enemy, train_dqn_player, train_q_enemy, train_q_player
+from domain.train.artifacts import (
     TRAINING_STATUS_INCOMPLETE,
     resolve_info_path,
 )
-from ui.components.controls import create_action_button, create_message_area, create_select, create_stepper, set_button_visual
-from ui.settings.layout import (
-    BUTTON_BAR_HEIGHT,
-    FIELD_ROW_HEIGHT,
-    FORM_FIELD_WIDTH,
-    FORM_HEIGHT,
-    FORM_LABEL_WIDTH,
-    FORM_SECOND_FIELD_WIDTH,
-    FORM_SECOND_LABEL_WIDTH,
-    FORM_WIDTH,
-    RUN_ACTION_BUTTON_WIDTH,
-    RUN_ACTION_GAP,
-    RUN_ACTION_PROGRESS_WIDTH,
-    RUN_ACTION_ROW_WIDTH,
-    lock_widget_size,
+from ui.components import (
+    GRID_CONTROL_OPTIONS,
+    create_action_button,
+    create_message_area,
+    create_select,
+    create_stepper,
+    create_text_entry,
+    set_button_visual,
 )
+from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import (
     ENEMY_LABELS,
     ENEMY_TYPES_BY_LABEL,
+    NO_REFERENCE_LABEL,
+    NO_RESUME_LABEL,
     PLAYER_LABELS,
     PLAYER_TYPES_BY_LABEL,
+    REFERENCE_TYPE_OPTIONS,
     TRAINING_ALGORITHM_LABELS,
     TRAINING_TARGET_LABELS,
     TRAINING_TYPE_LABELS,
 )
 from ui.settings.theme import BUTTON_BUSY, BUTTON_NORMAL
-from ui.panels.training_options import (
-    NO_REFERENCE_LABEL,
-    NO_RESUME_LABEL,
-    REFERENCE_TYPE_INITIAL_WEIGHTS,
-    REFERENCE_TYPE_OPTIONS,
+from workflows.training import (
     build_training_reference_options,
     build_training_resume_options,
     default_enemy_type_for_algorithm,
@@ -73,7 +66,7 @@ class TrainingPanel:
         self._set_output(self._default_output())
         self.output.trace_add("write", self._mark_custom_output)
         self.reference_model = tk.StringVar(value=NO_REFERENCE_LABEL)
-        self.reference_type = tk.StringVar(value=REFERENCE_TYPE_INITIAL_WEIGHTS)
+        self.reference_type = tk.StringVar(value=REFERENCE_TYPE_OPTIONS[0])
         self.resume_run = tk.StringVar(value=NO_RESUME_LABEL)
         self.reference_options: dict[str, Path | None] = {}
         self.resume_options: dict[str, dict[str, Any] | None] = {}
@@ -90,128 +83,123 @@ class TrainingPanel:
         self.refresh_target()
 
     def _build(self, parent: ttk.Frame) -> None:
-        training = ttk.LabelFrame(parent, text="模型训练设置", width=FORM_WIDTH, height=FORM_HEIGHT, padding=16)
-        lock_widget_size(training, width=FORM_WIDTH, height=FORM_HEIGHT)
-        training.grid(row=0, column=0, sticky="nsew")
-        training.columnconfigure(0, weight=0, minsize=FORM_LABEL_WIDTH)
-        training.columnconfigure(1, weight=0, minsize=FORM_FIELD_WIDTH)
-        training.columnconfigure(2, weight=0, minsize=FORM_SECOND_LABEL_WIDTH)
-        training.columnconfigure(3, weight=0, minsize=FORM_SECOND_FIELD_WIDTH)
-        for row in range(6):
-            training.rowconfigure(row, weight=0, minsize=FIELD_ROW_HEIGHT)
-        training.rowconfigure(6, weight=0, minsize=BUTTON_BAR_HEIGHT + 12)
-        training.rowconfigure(7, weight=0, minsize=72)
+        training, area = create_area_panel(parent, "模型训练设置")
 
-        ttk.Label(training, text="训练对象").grid(row=0, column=0, sticky="w", padx=(0, 10), pady=7)
-        create_select(
-            training,
-            self.target,
-            ("玩家 AI", "敌对 AI"),
-            command=lambda _: self.refresh_target(),
-        ).grid(row=0, column=1, sticky="ew", pady=7)
-        ttk.Label(training, text="算法").grid(row=0, column=2, sticky="w", padx=(16, 10), pady=7)
-        create_select(
-            training,
-            self.algorithm,
-            tuple(TRAINING_ALGORITHM_LABELS.values()),
-            command=lambda _: self.refresh_target(),
-        ).grid(row=0, column=3, sticky="ew", pady=7)
+        def place(
+            widget: tk.Misc,
+            row: int,
+            col: int,
+            rowspan: int = 1,
+            colspan: int = 1,
+            *,
+            sticky: str = "nsew",
+            padx: int = 6,
+            pady: int | None = None,
+        ) -> None:
+            area.grid_widget(widget, row, col, rowspan, colspan, sticky=sticky, padx=padx, pady=pady)
+
+        place(ttk.Label(training, text="训练对象"), 0, 0, colspan=3, sticky="w")
+        place(
+            create_select(
+                training,
+                self.target,
+                ("玩家 AI", "敌对 AI"),
+                command=lambda _: self.refresh_target(),
+                **GRID_CONTROL_OPTIONS,
+            ),
+            0,
+            3,
+            colspan=7,
+        )
+        place(ttk.Label(training, text="算法"), 0, 10, colspan=3, sticky="w")
+        place(
+            create_select(
+                training,
+                self.algorithm,
+                tuple(TRAINING_ALGORITHM_LABELS.values()),
+                command=lambda _: self.refresh_target(),
+                **GRID_CONTROL_OPTIONS,
+            ),
+            0,
+            13,
+            colspan=7,
+        )
 
         self.enemy_label = ttk.Label(training, text="对手敌人")
-        self.enemy_label.grid(row=1, column=0, sticky="w", padx=(0, 10), pady=7)
+        place(self.enemy_label, 1, 0, colspan=3, sticky="w")
         self.enemy_menu = create_select(
             training,
             self.enemy_type,
             tuple(ENEMY_LABELS.values()),
+            **GRID_CONTROL_OPTIONS,
         )
-        self.enemy_menu.grid(row=1, column=1, columnspan=3, sticky="ew", pady=7)
+        place(self.enemy_menu, 1, 3, colspan=17)
 
         self.player_label = ttk.Label(training, text="固定玩家")
-        self.player_label.grid(row=1, column=0, sticky="w", padx=(0, 10), pady=7)
+        place(self.player_label, 1, 0, colspan=3, sticky="w")
         self.player_menu = create_select(
             training,
             self.player_type,
             tuple(PLAYER_LABELS.values()),
+            **GRID_CONTROL_OPTIONS,
         )
-        self.player_menu.grid(row=1, column=1, columnspan=3, sticky="ew", pady=7)
+        place(self.player_menu, 1, 3, colspan=17)
 
-        ttk.Label(training, text="训练局数").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=7)
-        create_stepper(
-            training,
-            self.episodes,
-            from_=1,
-            to=100000,
-            width=10,
-        ).grid(
-            row=2,
-            column=1,
-            sticky="ew",
-            pady=7,
+        place(ttk.Label(training, text="训练局数"), 2, 0, colspan=3, sticky="w")
+        place(
+            create_stepper(
+                training,
+                self.episodes,
+                from_=1,
+                to=100000,
+                width=10,
+                **GRID_CONTROL_OPTIONS,
+            ),
+            2,
+            3,
+            colspan=7,
         )
+        place(ttk.Label(training, text="随机种子"), 2, 10, colspan=3, sticky="w")
+        place(create_text_entry(training, self.seed, **GRID_CONTROL_OPTIONS), 2, 13, colspan=7)
 
-        ttk.Label(training, text="随机种子").grid(row=2, column=2, sticky="w", padx=(16, 10), pady=7)
-        ttk.Entry(training, textvariable=self.seed).grid(row=2, column=3, sticky="ew", pady=7, ipady=2)
-
-        ttk.Label(training, text="参考模型").grid(row=3, column=0, sticky="w", padx=(0, 10), pady=7)
-        reference_row = ttk.Frame(training, style="Panel.TFrame", height=FIELD_ROW_HEIGHT - 14)
-        lock_widget_size(reference_row, height=FIELD_ROW_HEIGHT - 14)
-        reference_row.grid(row=3, column=1, columnspan=3, sticky="ew", pady=7)
-        reference_row.columnconfigure(0, weight=7)
-        reference_row.columnconfigure(1, weight=0)
-        reference_row.columnconfigure(2, weight=3)
-        reference_row.rowconfigure(0, weight=1, minsize=FIELD_ROW_HEIGHT - 14)
-
-        self.reference_select_host = ttk.Frame(reference_row, style="Panel.TFrame", height=FIELD_ROW_HEIGHT - 14)
-        lock_widget_size(self.reference_select_host, height=FIELD_ROW_HEIGHT - 14)
-        self.reference_select_host.grid(row=0, column=0, sticky="ew")
+        place(ttk.Label(training, text="参考模型"), 3, 0, colspan=3, sticky="w")
+        self.reference_select_host = ttk.Frame(training, style="Panel.TFrame")
         self.reference_select_host.columnconfigure(0, weight=1)
-        ttk.Label(reference_row, text="参考类型").grid(row=0, column=1, sticky="w", padx=(16, 10))
-        create_select(
-            reference_row,
-            self.reference_type,
-            REFERENCE_TYPE_OPTIONS,
-        ).grid(row=0, column=2, sticky="ew")
-
-        ttk.Label(training, text="继续训练").grid(row=4, column=0, sticky="w", padx=(0, 10), pady=7)
-        self.resume_select_host = ttk.Frame(training, style="Panel.TFrame", height=FIELD_ROW_HEIGHT - 14)
-        lock_widget_size(self.resume_select_host, height=FIELD_ROW_HEIGHT - 14)
-        self.resume_select_host.grid(row=4, column=1, columnspan=3, sticky="ew", pady=7)
-        self.resume_select_host.columnconfigure(0, weight=1)
-
-        ttk.Label(training, text="输出目录").grid(row=5, column=0, sticky="w", padx=(0, 10), pady=7)
-        ttk.Entry(training, textvariable=self.output).grid(
-            row=5,
-            column=1,
-            columnspan=3,
-            sticky="ew",
-            pady=7,
-            ipady=2,
+        self.reference_select_host.rowconfigure(0, weight=1)
+        place(self.reference_select_host, 3, 3, colspan=10)
+        place(ttk.Label(training, text="参考类型"), 3, 13, colspan=3, sticky="w")
+        place(
+            create_select(
+                training,
+                self.reference_type,
+                REFERENCE_TYPE_OPTIONS,
+                **GRID_CONTROL_OPTIONS,
+            ),
+            3,
+            16,
+            colspan=4,
         )
 
-        action_row = ttk.Frame(training, style="Panel.TFrame", width=RUN_ACTION_ROW_WIDTH, height=BUTTON_BAR_HEIGHT)
-        lock_widget_size(action_row, width=RUN_ACTION_ROW_WIDTH, height=BUTTON_BAR_HEIGHT)
-        action_row.grid(row=6, column=0, columnspan=4, sticky="w", pady=(10, 0))
-        action_row.columnconfigure(0, weight=0, minsize=RUN_ACTION_BUTTON_WIDTH)
-        action_row.columnconfigure(1, weight=0, minsize=RUN_ACTION_GAP)
-        action_row.columnconfigure(2, weight=0, minsize=RUN_ACTION_PROGRESS_WIDTH)
-        action_row.rowconfigure(0, weight=0, minsize=BUTTON_BAR_HEIGHT)
+        place(ttk.Label(training, text="继续训练"), 4, 0, colspan=3, sticky="w")
+        self.resume_select_host = ttk.Frame(training, style="Panel.TFrame")
+        self.resume_select_host.columnconfigure(0, weight=1)
+        self.resume_select_host.rowconfigure(0, weight=1)
+        place(self.resume_select_host, 4, 3, colspan=17)
 
-        self.button = create_action_button(action_row, text="训练 AI 模型", command=self.start)
-        self.button.grid(row=0, column=0, sticky="nsew")
+        place(ttk.Label(training, text="输出目录"), 5, 0, colspan=3, sticky="w")
+        place(create_text_entry(training, self.output, **GRID_CONTROL_OPTIONS), 5, 3, colspan=17)
+
+        self.button = create_action_button(training, text="训练 AI 模型", command=self.start)
+        place(self.button, 6, 0, colspan=5)
         self.progress_bar = ttk.Progressbar(
-            action_row,
+            training,
             variable=self.progress,
             maximum=100,
             mode="determinate",
         )
-        self.progress_bar.grid(row=0, column=2, sticky="ew")
-        create_message_area(training, self.status, height=72).grid(
-            row=7,
-            column=0,
-            columnspan=4,
-            sticky="ew",
-            pady=(8, 0),
-        )
+        place(self.progress_bar, 6, 5, colspan=15, sticky="ew")
+
+        place(create_message_area(training, self.status, **GRID_CONTROL_OPTIONS), 7, 0, rowspan=2, colspan=20)
 
     def refresh_target(self) -> None:
         if self.target.get() == "玩家 AI":
@@ -532,13 +520,13 @@ class TrainingPanel:
         previous_reference = self._selected_reference_path()
         previous_resume = self.resume_run.get()
 
-        self.reference_options = build_training_reference_options(training_type)
+        self.reference_options = _reference_option_map(training_type)
         if previous_reference is not None and not self._select_reference_path(previous_reference):
             self.reference_model.set(NO_REFERENCE_LABEL)
         elif previous_reference is None and self.reference_model.get() not in self.reference_options:
             self.reference_model.set(NO_REFERENCE_LABEL)
 
-        self.resume_options = build_training_resume_options(training_type)
+        self.resume_options = _resume_option_map(training_type)
         if previous_resume not in self.resume_options:
             self.resume_run.set(NO_RESUME_LABEL)
 
@@ -548,8 +536,9 @@ class TrainingPanel:
             self.reference_select_host,
             self.reference_model,
             tuple(self.reference_options),
+            **GRID_CONTROL_OPTIONS,
         )
-        self.reference_select.grid(row=0, column=0, sticky="ew")
+        self.reference_select.grid(row=0, column=0, sticky="nsew")
 
         if self.resume_select is not None:
             self.resume_select.destroy()
@@ -558,8 +547,9 @@ class TrainingPanel:
             self.resume_run,
             tuple(self.resume_options),
             command=lambda _: self._on_resume_selected(),
+            **GRID_CONTROL_OPTIONS,
         )
-        self.resume_select.grid(row=0, column=0, sticky="ew")
+        self.resume_select.grid(row=0, column=0, sticky="nsew")
 
     def _on_resume_selected(self) -> None:
         artifact = self._selected_resume_artifact()
@@ -644,6 +634,46 @@ class TrainingPanel:
 def build_training_panel(app: Any, parent: ttk.Frame) -> TrainingPanel:
     """创建模型训练面板。 / Build the model training panel."""
     return TrainingPanel(app, parent, app.ui_defaults["training"])
+
+
+def _reference_option_map(training_type: str) -> dict[str, Path | None]:
+    options: dict[str, Path | None] = {NO_REFERENCE_LABEL: None}
+    for option in build_training_reference_options(training_type):
+        suffix = "latest" if option.status == "latest" else _display_timestamp(option.created_at)
+        label = _unique_option_label(
+            options,
+            f"{TRAINING_TYPE_LABELS.get(option.training_type, option.training_type)} | {suffix}",
+        )
+        options[label] = option.path
+    return options
+
+
+def _resume_option_map(training_type: str) -> dict[str, dict[str, Any] | None]:
+    options: dict[str, dict[str, Any] | None] = {NO_RESUME_LABEL: None}
+    for option in build_training_resume_options(training_type):
+        label = _unique_option_label(
+            options,
+            (
+                f"{TRAINING_TYPE_LABELS.get(option.training_type, option.training_type)} | "
+                f"未完成 {option.completed_episodes}/{option.target_episodes} | "
+                f"{_display_timestamp(option.created_at)}"
+            ),
+        )
+        options[label] = option.artifact
+    return options
+
+
+def _unique_option_label(options: dict[str, object], base_label: str) -> str:
+    if base_label not in options:
+        return base_label
+    index = 2
+    while f"{base_label} #{index}" in options:
+        index += 1
+    return f"{base_label} #{index}"
+
+
+def _display_timestamp(value: str) -> str:
+    return value.replace("T", " ") if value else "unknown"
 
 
 __all__ = ["TrainingPanel", "build_training_panel"]

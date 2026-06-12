@@ -6,19 +6,18 @@ import tkinter as tk
 from typing import Any
 from tkinter import ttk
 
-from enemies import create_enemy
-from game.env import GameEnv
-from game.rules import move
-from players import create_player
-from ui.components.controls import create_action_button, create_message_area, create_select, set_button_visual
-from ui.settings.layout import (
-    BUTTON_BAR_HEIGHT,
-    FIELD_ROW_HEIGHT,
-    FORM_WIDTH,
-    GAME_CONTROLS_HEIGHT,
-    GAME_STATUS_HEIGHT,
-    lock_widget_size,
+from domain.enemies import create_enemy
+from domain.game.env import GameEnv
+from domain.game.rules import move
+from domain.players import create_player
+from ui.components import (
+    GRID_CONTROL_OPTIONS,
+    create_action_button,
+    create_message_area,
+    create_select,
+    set_button_visual,
 )
+from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import ENEMY_LABELS, ENEMY_TYPES_BY_LABEL, PLAYER_LABELS, PLAYER_TYPES_BY_LABEL
 from ui.settings.theme import BUTTON_NORMAL, BUTTON_PRESSED
 
@@ -36,52 +35,58 @@ class GamePanel:
         self._build(parent)
 
     def _build(self, parent: ttk.Frame) -> None:
-        controls = ttk.LabelFrame(parent, text="对局控制", width=FORM_WIDTH, height=GAME_CONTROLS_HEIGHT, padding=16)
-        lock_widget_size(controls, width=FORM_WIDTH, height=GAME_CONTROLS_HEIGHT)
-        controls.grid(row=0, column=0, sticky="ew")
-        controls.columnconfigure(0, weight=1)
-        controls.columnconfigure(1, weight=1)
-        controls.columnconfigure(2, weight=1)
-        controls.rowconfigure(0, weight=0, minsize=FIELD_ROW_HEIGHT)
-        controls.rowconfigure(1, weight=0, minsize=FIELD_ROW_HEIGHT)
-        controls.rowconfigure(2, weight=0, minsize=BUTTON_BAR_HEIGHT)
+        controls, area = create_area_panel(parent, "对局控制")
 
-        ttk.Label(controls, text="本局敌人").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=(0, 12))
+        def place(
+            widget: tk.Misc,
+            row: int,
+            col: int,
+            rowspan: int = 1,
+            colspan: int = 1,
+            *,
+            sticky: str = "nsew",
+            padx: int = 6,
+            pady: int | None = None,
+        ) -> None:
+            area.grid_widget(widget, row, col, rowspan, colspan, sticky=sticky, padx=padx, pady=pady)
+
+        place(ttk.Label(controls, text="本局敌人"), 0, 0, colspan=3, sticky="w")
         enemy_menu = create_select(
             controls,
             self.enemy_type,
             tuple(ENEMY_LABELS.values()),
             command=lambda _: self.restart(),
+            **GRID_CONTROL_OPTIONS,
         )
-        enemy_menu.grid(row=0, column=1, columnspan=2, sticky="ew", pady=(0, 12))
+        place(enemy_menu, 0, 3, colspan=17)
 
-        ttk.Label(controls, text="自动玩家").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=(0, 14))
-        create_select(
-            controls,
-            self.ai_player_type,
-            (PLAYER_LABELS["heuristic"], PLAYER_LABELS["q_ai"], PLAYER_LABELS["dqn_player"]),
-            command=lambda _: self.reload_ai_player(),
-        ).grid(row=1, column=1, columnspan=2, sticky="ew", pady=(0, 14))
+        place(ttk.Label(controls, text="自动玩家"), 1, 0, colspan=3, sticky="w")
+        place(
+            create_select(
+                controls,
+                self.ai_player_type,
+                (PLAYER_LABELS["heuristic"], PLAYER_LABELS["q_ai"], PLAYER_LABELS["dqn_player"]),
+                command=lambda _: self.reload_ai_player(),
+                **GRID_CONTROL_OPTIONS,
+            ),
+            1,
+            3,
+            colspan=17,
+        )
 
-        button_bar = ttk.Frame(controls, style="Panel.TFrame", height=BUTTON_BAR_HEIGHT)
-        lock_widget_size(button_bar, height=BUTTON_BAR_HEIGHT)
-        button_bar.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(4, 14))
-        button_bar.rowconfigure(0, weight=1)
-        for column in range(3):
-            button_bar.columnconfigure(column, weight=1, uniform="game_actions")
+        self.restart_button = create_action_button(controls, text="重新开始", command=self.restart)
+        place(self.restart_button, 2, 0, colspan=6)
+        self.ai_step_button = create_action_button(controls, text="AI 单步", command=self.ai_step)
+        place(self.ai_step_button, 2, 7, colspan=6)
+        self.auto_button = create_action_button(controls, text="自动播放：关", command=self.toggle_auto)
+        place(self.auto_button, 2, 14, colspan=6)
 
-        self.restart_button = create_action_button(button_bar, text="重新开始", command=self.restart)
-        self.restart_button.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
-        self.ai_step_button = create_action_button(button_bar, text="AI 单步", command=self.ai_step)
-        self.ai_step_button.grid(row=0, column=1, sticky="nsew", padx=8)
-        self.auto_button = create_action_button(button_bar, text="自动播放：关", command=self.toggle_auto)
-        self.auto_button.grid(row=0, column=2, sticky="nsew", padx=(8, 0))
-
-        create_message_area(parent, self.status, height=GAME_STATUS_HEIGHT).grid(
-            row=1,
-            column=0,
-            sticky="ew",
-            pady=(18, 0),
+        place(
+            create_message_area(controls, self.status, **GRID_CONTROL_OPTIONS),
+            3,
+            0,
+            rowspan=2,
+            colspan=20,
         )
 
     def new_env(self) -> GameEnv:

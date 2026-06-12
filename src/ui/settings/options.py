@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from workflows.evaluation import EVALUATION_TARGETS
+from workflows.training import REFERENCE_TYPE_INITIAL_WEIGHTS
+
 PLAYER_LABELS = {
     "random": "随机玩家",
     "heuristic": "启发式玩家",
@@ -30,3 +33,22 @@ TRAINING_TYPE_LABELS = {
     "enemy_q": "敌人 Q-learning",
     "enemy_dqn": "敌人 DQN",
 }
+
+NO_REFERENCE_LABEL = "不使用参考模型"
+NO_RESUME_LABEL = "不继续训练"
+REFERENCE_TYPE_LABELS = {
+    REFERENCE_TYPE_INITIAL_WEIGHTS: "起始权重",
+}
+# 蒸馏训练实现前不进入下拉选项。 / Distillation stays hidden until implemented.
+REFERENCE_TYPE_OPTIONS = tuple(REFERENCE_TYPE_LABELS.values())
+REFERENCE_TYPES_BY_LABEL = {label: key for key, label in REFERENCE_TYPE_LABELS.items()}
+
+NO_MODEL_LABEL = "暂无可用模型"
+EVALUATION_TARGET_LABELS = {
+    "auto_player": "自动玩家",
+    "player": "玩家模型",
+    "auto_enemy": "自动敌人",
+    "enemy": "敌对模型",
+}
+EVALUATION_TARGET_OPTIONS = tuple(EVALUATION_TARGET_LABELS[target] for target in EVALUATION_TARGETS)
+EVALUATION_TARGETS_BY_LABEL = {label: key for key, label in EVALUATION_TARGET_LABELS.items()}
