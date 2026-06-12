@@ -22,7 +22,7 @@ from domain.train.artifacts import (
     resume_training_context,
     training_run_log_path,
 )
-from domain.train.looping import has_remaining_episodes, resolve_episode_limit, scheduled_epsilon
+from domain.train.looping import resolve_episode_limit, run_training_episode_loop
 
 ENEMY_Q_DEFAULTS = get_train_defaults("enemy_q")
 
@@ -97,95 +97,82 @@ def train_q_enemy(
 
     rng = random.Random(seed)
     model = EnemyQModel.load(initial_model_path) if initial_model_path is not None else EnemyQModel.create(rng=rng)
-    scores: list[int] = []
-    max_tiles: list[int] = []
-    stopped = False
+    def run_episode(_episode: int, episode_seed: int | None, epsilon: float):
+        player = create_player(player_type, rng=rng)
+        env = GameEnv(seed=episode_seed)
+        state = env.reset()
 
-    local_episode = 0
-    try:
-        while has_remaining_episodes(local_episode, remaining_episodes):
-            if stop_event is not None and stop_event.is_set():
-                stopped = True
+        while not state.done and state.steps < max_steps:
+            legal_player_actions = env.get_legal_actions()
+            player_action = player.select_action(state, legal_player_actions)
+            if player_action is None:
                 break
-            local_episode += 1
-            episode = start_completed + local_episode
-            epsilon = scheduled_epsilon(
-                episode=episode,
-                limit=episode_limit,
-                epsilon_start=epsilon_start,
-                epsilon_end=epsilon_end,
-            )
 
-            episode_seed = None if seed is None else seed + episode - 1
-            player = create_player(player_type, rng=rng)
-            env = GameEnv(seed=episode_seed)
-            state = env.reset()
+            moved = move(state.board, player_action)
+            if not moved.moved:
+                break
 
-            while not state.done and state.steps < max_steps:
-                legal_player_actions = env.get_legal_actions()
-                player_action = player.select_action(state, legal_player_actions)
-                if player_action is None:
-                    break
+            board_after_player = moved.board
+            score_after_player = state.score + moved.score_delta
+            steps_after_player = state.steps + 1
 
-                moved = move(state.board, player_action)
-                if not moved.moved:
-                    break
-
-                board_after_player = moved.board
-                score_after_player = state.score + moved.score_delta
-                steps_after_player = state.steps + 1
-
-                if not get_empty_cells(board_after_player):
-                    # 玩家移动后若没有空格，敌人没有出块动作，只需同步终局状态。
-                    # If the player move leaves no empty cells, the enemy has no spawn action to apply.
-                    state = GameState(
-                        board=board_after_player,
-                        score=score_after_player,
-                        steps=steps_after_player,
-                        done=is_game_over(board_after_player),
-                    )
-                    break
-
-                legal_enemy_actions = get_legal_spawn_actions(board_after_player)
-                enemy_action = model.epsilon_greedy_action(
-                    board_after_player,
-                    legal_enemy_actions,
-                    epsilon=epsilon,
-                    rng=rng,
-                )
-                if enemy_action is None:
-                    break
-
-                row, col, value = action_to_spawn(enemy_action)
-                next_board = place_tile(board_after_player, row, col, value)
-                next_state = GameState(
-                    board=next_board,
+            if not get_empty_cells(board_after_player):
+                # 玩家移动后若没有空格，敌人没有出块动作，只需同步终局状态。
+                # If the player move leaves no empty cells, the enemy has no spawn action to apply.
+                state = GameState(
+                    board=board_after_player,
                     score=score_after_player,
                     steps=steps_after_player,
-                    done=is_game_over(next_board),
+                    done=is_game_over(board_after_player),
                 )
-                reward = enemy_reward(board_after_player, next_state, moved.score_delta)
-                target = reward
-                if not next_state.done:
-                    # 敌人 Q 值基于“玩家移动后的棋盘”，因为敌人只学习出块选择。
-                    # Enemy Q values are based on the post-player board because it learns spawn choices only.
-                    target += gamma * model.max_next_q(next_state.board)
-                model.update(board_after_player, enemy_action, target=target, learning_rate=learning_rate)
-                env.set_board(next_state.board, score=next_state.score, steps=next_state.steps)
-                state = env.snapshot()
-
-            scores.append(state.score)
-            max_tiles.append(state.max_tile)
-            if progress_callback is not None:
-                progress_callback(episode, target_episodes, state, epsilon)
-            if stop_event is not None and stop_event.is_set():
-                stopped = True
                 break
-    except KeyboardInterrupt:
-        stopped = True
+
+            legal_enemy_actions = get_legal_spawn_actions(board_after_player)
+            enemy_action = model.epsilon_greedy_action(
+                board_after_player,
+                legal_enemy_actions,
+                epsilon=epsilon,
+                rng=rng,
+            )
+            if enemy_action is None:
+                break
+
+            row, col, value = action_to_spawn(enemy_action)
+            next_board = place_tile(board_after_player, row, col, value)
+            next_state = GameState(
+                board=next_board,
+                score=score_after_player,
+                steps=steps_after_player,
+                done=is_game_over(next_board),
+            )
+            reward = enemy_reward(board_after_player, next_state, moved.score_delta)
+            target = reward
+            if not next_state.done:
+                # 敌人 Q 值基于“玩家移动后的棋盘”，因为敌人只学习出块选择。
+                # Enemy Q values are based on the post-player board because it learns spawn choices only.
+                target += gamma * model.max_next_q(next_state.board)
+            model.update(board_after_player, enemy_action, target=target, learning_rate=learning_rate)
+            env.set_board(next_state.board, score=next_state.score, steps=next_state.steps)
+            state = env.snapshot()
+        return state
+
+    loop_result = run_training_episode_loop(
+        start_completed=start_completed,
+        remaining_episodes=remaining_episodes,
+        limit=episode_limit,
+        seed=seed,
+        epsilon_start=epsilon_start,
+        epsilon_end=epsilon_end,
+        episode_runner=run_episode,
+        stop_event=stop_event,
+        progress_callback=progress_callback,
+    )
+    scores = loop_result.scores
+    max_tiles = loop_result.max_tiles
+    stopped = loop_result.stopped
 
     output_path = model.save(output_path)
-    completed_episodes = start_completed + len(scores)
+    completed_episodes = start_completed + loop_result.episodes_run
     status = (
         TRAINING_STATUS_INCOMPLETE
         if stopped and target_episodes is not None and completed_episodes < target_episodes

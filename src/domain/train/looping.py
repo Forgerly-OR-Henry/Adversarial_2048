@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -38,9 +40,70 @@ def resolve_episode_limit(episodes: int | None, default_episodes: int) -> Episod
     return EpisodeLimit(target_episodes=target_episodes, epsilon_window=epsilon_window)
 
 
+@dataclass(frozen=True)
+class TrainingLoopResult:
+    """共享训练外层循环的结果。 / Result returned by the shared training episode loop."""
+
+    scores: list[int]
+    max_tiles: list[int]
+    stopped: bool
+
+    @property
+    def episodes_run(self) -> int:
+        """本次调用实际完成的局数。 / Number of episodes completed by this call."""
+        return len(self.scores)
+
+
 def has_remaining_episodes(local_episode_count: int, remaining_episodes: int | None) -> bool:
     """判断训练循环是否还应继续。 / Return whether the training loop should continue."""
     return remaining_episodes is None or local_episode_count < remaining_episodes
+
+
+def run_training_episode_loop(
+    *,
+    start_completed: int,
+    remaining_episodes: int | None,
+    limit: EpisodeLimit,
+    seed: int | None,
+    epsilon_start: float,
+    epsilon_end: float,
+    episode_runner: Callable[[int, int | None, float], Any],
+    stop_event: Any = None,
+    progress_callback: Callable[[int, int | None, Any, float], None] | None = None,
+) -> TrainingLoopResult:
+    """运行共享训练外层循环。 / Run the shared outer training episode loop."""
+    scores: list[int] = []
+    max_tiles: list[int] = []
+    stopped = False
+    local_episode = 0
+
+    try:
+        while has_remaining_episodes(local_episode, remaining_episodes):
+            if stop_event is not None and stop_event.is_set():
+                stopped = True
+                break
+            local_episode += 1
+            episode = start_completed + local_episode
+            epsilon = scheduled_epsilon(
+                episode=episode,
+                limit=limit,
+                epsilon_start=epsilon_start,
+                epsilon_end=epsilon_end,
+            )
+            episode_seed = None if seed is None else seed + episode - 1
+            state = episode_runner(episode, episode_seed, epsilon)
+
+            scores.append(state.score)
+            max_tiles.append(state.max_tile)
+            if progress_callback is not None:
+                progress_callback(episode, limit.target_episodes, state, epsilon)
+            if stop_event is not None and stop_event.is_set():
+                stopped = True
+                break
+    except KeyboardInterrupt:
+        stopped = True
+
+    return TrainingLoopResult(scores=scores, max_tiles=max_tiles, stopped=stopped)
 
 
 def scheduled_epsilon(
@@ -60,7 +123,9 @@ def scheduled_epsilon(
 
 __all__ = [
     "EpisodeLimit",
+    "TrainingLoopResult",
     "has_remaining_episodes",
     "resolve_episode_limit",
+    "run_training_episode_loop",
     "scheduled_epsilon",
 ]

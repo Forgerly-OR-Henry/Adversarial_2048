@@ -19,7 +19,7 @@ from domain.train.artifacts import (
     resume_training_context,
     training_run_log_path,
 )
-from domain.train.looping import has_remaining_episodes, resolve_episode_limit, scheduled_epsilon
+from domain.train.looping import resolve_episode_limit, run_training_episode_loop
 
 PLAYER_Q_DEFAULTS = get_train_defaults("player_q")
 
@@ -92,60 +92,45 @@ def train_q_player(
 
     rng = random.Random(seed)
     model = LinearQModel.load(initial_model_path) if initial_model_path is not None else LinearQModel.create(rng=rng)
-    scores: list[int] = []
-    max_tiles: list[int] = []
-    stopped = False
+    def run_episode(_episode: int, episode_seed: int | None, epsilon: float):
+        enemy = create_enemy(enemy_type, rng=rng)
+        env = GameEnv(enemy=enemy, seed=episode_seed)
+        state = env.reset()
 
-    local_episode = 0
-    try:
-        while has_remaining_episodes(local_episode, remaining_episodes):
-            if stop_event is not None and stop_event.is_set():
-                stopped = True
+        while not state.done and state.steps < max_steps:
+            legal_actions = env.get_legal_actions()
+            action = model.epsilon_greedy_action(state.board, legal_actions, epsilon=epsilon, rng=rng)
+            if action is None:
                 break
-            local_episode += 1
-            episode = start_completed + local_episode
-            # 线性退火探索率：无限训练会在默认训练局数窗口内退火，之后固定在末值。
-            # Linearly anneal epsilon; unlimited runs use the default episode window then hold.
-            epsilon = scheduled_epsilon(
-                episode=episode,
-                limit=episode_limit,
-                epsilon_start=epsilon_start,
-                epsilon_end=epsilon_end,
-            )
 
-            episode_seed = None if seed is None else seed + episode - 1
-            enemy = create_enemy(enemy_type, rng=rng)
-            env = GameEnv(enemy=enemy, seed=episode_seed)
-            state = env.reset()
+            previous_state = state
+            state = env.step(action)
+            reward = player_reward(previous_state, state)
+            target = reward
+            if not state.done:
+                # Q-learning 目标 = 当前奖励 + 折扣后的下一状态最佳估值。
+                # Q-learning target = immediate reward plus discounted best next-state value.
+                target += gamma * model.max_next_q(state.board)
+            model.update(previous_state.board, action, target=target, learning_rate=learning_rate)
+        return state
 
-            while not state.done and state.steps < max_steps:
-                legal_actions = env.get_legal_actions()
-                action = model.epsilon_greedy_action(state.board, legal_actions, epsilon=epsilon, rng=rng)
-                if action is None:
-                    break
-
-                previous_state = state
-                state = env.step(action)
-                reward = player_reward(previous_state, state)
-                target = reward
-                if not state.done:
-                    # Q-learning 目标 = 当前奖励 + 折扣后的下一状态最佳估值。
-                    # Q-learning target = immediate reward plus discounted best next-state value.
-                    target += gamma * model.max_next_q(state.board)
-                model.update(previous_state.board, action, target=target, learning_rate=learning_rate)
-
-            scores.append(state.score)
-            max_tiles.append(state.max_tile)
-            if progress_callback is not None:
-                progress_callback(episode, target_episodes, state, epsilon)
-            if stop_event is not None and stop_event.is_set():
-                stopped = True
-                break
-    except KeyboardInterrupt:
-        stopped = True
+    loop_result = run_training_episode_loop(
+        start_completed=start_completed,
+        remaining_episodes=remaining_episodes,
+        limit=episode_limit,
+        seed=seed,
+        epsilon_start=epsilon_start,
+        epsilon_end=epsilon_end,
+        episode_runner=run_episode,
+        stop_event=stop_event,
+        progress_callback=progress_callback,
+    )
+    scores = loop_result.scores
+    max_tiles = loop_result.max_tiles
+    stopped = loop_result.stopped
 
     output_path = model.save(output_path)
-    completed_episodes = start_completed + len(scores)
+    completed_episodes = start_completed + loop_result.episodes_run
     status = (
         TRAINING_STATUS_INCOMPLETE
         if stopped and target_episodes is not None and completed_episodes < target_episodes
