@@ -155,7 +155,7 @@ adversarial_2048/
 │   ├── _path.py                      # [已实现] 测试时加入 src 路径
 │   ├── test_rules.py                 # [已实现] 移动合并、非法移动、结束判断
 │   ├── test_players_enemies.py       # [已实现] 玩家动作合法性、敌人出块合法性
-│   ├── test_end_to_end.py            # [已实现] 自动对局、实验 CSV、无参数 GUI 入口解析
+│   ├── test_end_to_end.py            # [已实现] 自动对局、实验 CSV、无参数和 GUI 初始玩家入口解析
 │   ├── test_q_player.py              # [已实现] Q 模型保存加载、AI 玩家动作、训练写出模型
 │   ├── test_q_enemy.py               # [已实现] 敌人 Q 模型保存加载、敌对 AI 动作、训练写出模型
 │   ├── test_stability.py             # [已实现] DQN 稳定性配置与控制器测试
@@ -171,7 +171,7 @@ adversarial_2048/
 │   ├── evaluate/                     # [已实现] 批量评估配置
 │   │   └── default.yaml              # [已实现] 默认玩家、敌人、局数、seed、输出与 max_steps
 │   ├── ui/                           # [已实现] GUI 默认配置
-│   │   └── default.yaml              # [已实现] 初始玩家、敌人、实验区和训练区默认值
+│   │   └── default.yaml              # [已实现] 初始自动玩家、敌人、实验区和训练区默认值
 │   └── train/                        # [已实现] 训练配置
 │       ├── player_q.yaml             # [已实现] Q-learning 玩家训练默认参数
 │       ├── enemy_q.yaml              # [已实现] Q-learning 敌人训练默认参数
@@ -239,7 +239,7 @@ adversarial_2048/
 ### 运行方式
 
 - `[已实现]` `python src/main.py`：默认启动 GUI。
-- `[已实现]` `python src/main.py gui --enemy greedy`：显式启动 GUI。
+- `[已实现]` `python src/main.py gui --player q_ai --enemy greedy`：显式启动 GUI，并选择初始自动玩家与敌人。
 - `[已实现]` `python src/main.py play --enemy random`：命令行手动玩。
 - `[已实现]` `python src/main.py auto --player heuristic --enemy random --episodes 100`：命令行批量跑实验。
 - `[已实现]` `python src/main.py auto --player q_ai --enemy random --episodes 100`：命令行评估 AI 模型玩家。
@@ -257,12 +257,12 @@ adversarial_2048/
 - `[已实现]` 重新开始。
 - `[已实现]` AI 单步。
 - `[已实现]` 自动播放。
-- `[已实现]` 对局工作区内切换本局敌人类型。
+- `[已实现]` 对局工作区内切换自动玩家和本局敌人类型。
 - `[已实现]` GUI 内批量实验运行器。
 - `[已实现]` GUI 内可调玩家、敌人、局数、随机种子、输出目录；单项评估 CSV 文件名固定为 `<player>_vs_<enemy>.csv`。
 - `[已实现]` 单项评估可选择训练成果、自动玩家或自动敌人进行对比。
 - `[已实现]` GUI 内可选择 `AI 模型玩家` 运行实验。
-- `[已实现]` GUI 对局控制区可选择 `AI 模型玩家` 执行 AI 单步/自动播放。
+- `[已实现]` GUI 对局控制区可选择自动玩家执行 AI 单步/自动播放。
 - `[已实现]` GUI 内模型训练器，可设置训练对象、对手、训练局数、随机种子、参考模型、继续训练和输出目录。
 - `[已实现]` GUI 内模型训练器可切换训练对象：`玩家 AI` / `敌对 AI`。
 - `[已实现]` 训练 `玩家 AI` 时隐藏玩家选择，只显示对手敌人；训练 `敌对 AI` 时隐藏敌人选择，只显示固定玩家。
@@ -374,7 +374,7 @@ episode,max_tile,score,steps,player_type,enemy_type,seed
 
 - `[已实现]` `configs/paths.yaml`：共享模型路径、正式输出目录、系统日志与错误日志路径。
 - `[已实现]` `configs/evaluate/default.yaml`：批量评估默认参数。
-- `[已实现]` `configs/ui/default.yaml`：GUI 初始默认值。
+- `[已实现]` `configs/ui/default.yaml`：GUI 初始自动玩家、敌人和面板默认值。
 - `[已实现]` `configs/train/player_q.yaml`：Q-learning 玩家训练默认参数。
 - `[已实现]` `configs/train/enemy_q.yaml`：Q-learning 敌人训练默认参数。
 - `[已实现]` `configs/train/player_dqn.yaml`：DQN 玩家训练默认参数。

@@ -1,5 +1,5 @@
-# GUI 启动时默认玩家 / Default player when GUI starts
-player: human
+# GUI 启动时自动玩家默认值 / Default automatic player when GUI starts
+player: heuristic
 # GUI 启动时默认敌人 / Default enemy when GUI starts
 enemy: random
 

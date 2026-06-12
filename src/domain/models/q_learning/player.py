@@ -9,7 +9,7 @@ from config import get_model_path
 from domain.game.constants import ACTIONS
 from domain.game.rules import get_legal_actions
 from domain.models.q_learning.linear import LinearFeatureQModel
-from domain.models.q_learning.player_features import encode_board, tile_log2
+from domain.models.q_learning.player_features import encode_board
 
 DEFAULT_MODEL_PATH = get_model_path("q_learning_player")
 

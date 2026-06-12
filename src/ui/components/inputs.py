@@ -24,6 +24,34 @@ STEPPER_BUTTON_HEIGHT = SELECT_BUTTON_SIZE // 2
 GRID_CONTROL_OPTIONS = {"fixed_height": False}
 
 
+def _is_descendant(widget: tk.Misc, ancestor: tk.Misc) -> bool:
+    """判断 widget 是否属于某个控件。 / Return whether widget belongs to an ancestor widget."""
+    current: tk.Misc | None = widget
+    while current is not None:
+        if current == ancestor:
+            return True
+        try:
+            current = current.master
+        except AttributeError:
+            return False
+    return False
+
+
+def _bind_entry_blur_on_external_click(container: tk.Misc, entry: tk.Entry) -> None:
+    """点击输入框外部时移走焦点，隐藏插入光标。 / Move focus away on external clicks to hide caret."""
+
+    def blur_on_external_click(event: tk.Event) -> None:
+        if _is_descendant(event.widget, container):
+            return
+        try:
+            if entry.focus_get() == entry:
+                container.focus_set()
+        except tk.TclError:
+            return
+
+    container.bind_all("<ButtonPress-1>", blur_on_external_click, add="+")
+
+
 def create_select(
     parent: tk.Misc,
     variable: tk.StringVar,
@@ -96,21 +124,10 @@ def create_select(
             popup.destroy()
         popup = None
 
-    def is_descendant(widget: tk.Misc, ancestor: tk.Misc) -> bool:
-        current: tk.Misc | None = widget
-        while current is not None:
-            if current == ancestor:
-                return True
-            try:
-                current = current.master
-            except AttributeError:
-                return False
-        return False
-
     def close_on_external_click(event: tk.Event) -> None:
         if popup is None or not popup.winfo_exists():
             return
-        if is_descendant(event.widget, select) or is_descendant(event.widget, popup):
+        if _is_descendant(event.widget, select) or _is_descendant(event.widget, popup):
             return
         close_popup()
 
@@ -213,7 +230,7 @@ def create_select(
 
 def create_stepper(
     parent: tk.Misc,
-    variable: tk.IntVar,
+    variable: tk.Variable,
     from_: int,
     to: int,
     width: int = 10,
@@ -282,6 +299,7 @@ def create_stepper(
     arrows.columnconfigure(0, minsize=STEPPER_BUTTON_WIDTH, weight=1)
     make_arrow("▲", 1, 0)
     make_arrow("▼", -1, 1)
+    _bind_entry_blur_on_external_click(stepper, entry)
     return stepper
 
 
@@ -329,6 +347,7 @@ def create_text_entry(
 
     input_box.bind("<Button-1>", focus_entry)
     content.bind("<Button-1>", focus_entry)
+    _bind_entry_blur_on_external_click(input_box, entry)
     return input_box
 
 

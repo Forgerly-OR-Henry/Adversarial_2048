@@ -129,7 +129,6 @@ def _train_candidate(
             seed=seed,
             output=None,
             max_steps=defaults["max_steps"],
-            publish_latest=False,
             **parameters,
         )
     if target == "enemy" and algorithm == "q_learning":
@@ -139,7 +138,6 @@ def _train_candidate(
             seed=seed,
             output=None,
             max_steps=defaults["max_steps"],
-            publish_latest=False,
             **parameters,
         )
     if target == "player":
@@ -151,7 +149,6 @@ def _train_candidate(
             seed=seed,
             output=None,
             max_steps=defaults["max_steps"],
-            publish_latest=False,
             **parameters,
         )
     from domain.train.dqn.enemy import train_dqn_enemy
@@ -162,7 +159,6 @@ def _train_candidate(
         seed=seed,
         output=None,
         max_steps=defaults["max_steps"],
-        publish_latest=False,
         **parameters,
     )
 

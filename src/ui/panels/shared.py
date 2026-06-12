@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Container
+from tkinter import ttk
 
 from ui.settings.layout.grid import AreaGridSpec
 
@@ -21,6 +22,16 @@ def unique_label(existing: Container[str], base_label: str) -> str:
 def display_timestamp(value: str) -> str:
     """把 ISO 时间转为界面展示文本。 / Convert an ISO timestamp into display text."""
     return value.replace("T", " ") if value else "unknown"
+
+
+def create_field_label(
+    parent: tk.Misc,
+    *,
+    text: str | None = None,
+    textvariable: tk.StringVar | None = None,
+) -> ttk.Label:
+    """创建网格表单左侧居中的字段标签。 / Create a centered field label for grid forms."""
+    return ttk.Label(parent, text=text, textvariable=textvariable, anchor="center", justify="center")
 
 
 def make_grid_placer(area: AreaGridSpec):

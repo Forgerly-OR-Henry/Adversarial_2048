@@ -26,6 +26,7 @@ from domain.models.torch_utils import checkpoint_metadata, load_torch_checkpoint
 from domain.train.artifacts import (
     TRAINING_STATUS_INCOMPLETE,
     list_incomplete_training_artifacts,
+    list_training_artifacts,
     load_training_info,
     model_path_from_info,
     training_info_status,
@@ -39,12 +40,14 @@ from ui.components.inputs import GRID_CONTROL_OPTIONS as INPUT_GRID_CONTROL_OPTI
 from ui.settings.options import (
     EVALUATION_TARGET_LABELS,
     REFERENCE_TYPE_OPTIONS as REFERENCE_TYPE_LABEL_OPTIONS,
+    REFERENCE_TYPES_BY_LABEL,
 )
 from workflows.evaluation import (
     EVALUATION_TARGETS,
     EvaluationModelOption,
     build_automatic_enemy_options,
     build_automatic_player_options,
+    build_evaluation_model_options,
     default_evaluation_pair_for_empty_selection,
     default_single_evaluation_output_directory,
     resolve_single_evaluation_request,
@@ -144,6 +147,7 @@ class TrainingPlatformTest(unittest.TestCase):
         self.assertEqual(REFERENCE_TYPE_OPTIONS, (REFERENCE_TYPE_INITIAL_WEIGHTS,))
         self.assertNotIn("distillation", REFERENCE_TYPE_OPTIONS)
         self.assertEqual(REFERENCE_TYPE_LABEL_OPTIONS, ("起始权重",))
+        self.assertEqual(REFERENCE_TYPES_BY_LABEL["起始权重"], REFERENCE_TYPE_INITIAL_WEIGHTS)
         self.assertNotIn("蒸馏", REFERENCE_TYPE_LABEL_OPTIONS)
 
     def test_workflow_modules_do_not_import_ui_package(self):
@@ -239,7 +243,7 @@ class TrainingPlatformTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             single_evaluation_output_csv_path("q_ai", "random", output_directory / "log.jsonl")
 
-    def test_default_training_creates_timestamped_artifact_and_latest(self):
+    def test_default_training_creates_timestamped_artifact_without_latest(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp_dir:
             runs_root = Path(temp_dir) / "runs"
             latest_root = Path(temp_dir) / "latest"
@@ -250,18 +254,55 @@ class TrainingPlatformTest(unittest.TestCase):
                 self.assertNotEqual(summary_a.output_path, summary_b.output_path)
                 self.assertTrue(summary_a.output_path.exists())
                 self.assertTrue(summary_b.output_path.exists())
-                self.assertTrue(summary_b.latest_output_path.exists())
+                self.assertFalse(latest_root.exists())
                 info = load_training_info(summary_a.output_path)
                 self.assertIsNotNone(info)
                 self.assertFalse(_contains_windows_absolute_path(info))
                 artifact_labels = build_training_artifact_labels()
-                self.assertEqual(artifact_labels["玩家 Q-learning | latest"], str(summary_b.latest_output_path))
+                self.assertNotIn("玩家 Q-learning | latest", artifact_labels)
 
                 with summary_b.run_log_path.open("r", encoding="utf-8-sig") as handle:
                     last_record = json.loads([line for line in handle if line.strip()][-1])
                 self.assertEqual(summary_b.run_log_path.name, "log.jsonl")
                 self.assertEqual(last_record["event"], "training_completed")
                 self.assertFalse(_contains_windows_absolute_path(last_record))
+
+    def test_unlimited_q_training_stop_is_completed_and_not_resumable(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp_dir:
+            runs_root = Path(temp_dir) / "runs"
+            latest_root = Path(temp_dir) / "latest"
+            with self._patched_player_q_roots(runs_root, latest_root):
+                stop_event = threading.Event()
+
+                def stop_after_first(current, total, _state, _epsilon):
+                    self.assertIsNone(total)
+                    if current >= 1:
+                        stop_event.set()
+
+                summary = train_q_player(
+                    episodes=None,
+                    enemy_type="random",
+                    seed=111,
+                    max_steps=5,
+                    stop_event=stop_event,
+                    progress_callback=stop_after_first,
+                )
+
+                self.assertEqual(summary.status, "completed")
+                self.assertIsNone(summary.target_episodes)
+                self.assertEqual(summary.completed_episodes, 1)
+                self.assertTrue(summary.output_path.exists())
+                self.assertEqual(list_incomplete_training_artifacts("player_q"), [])
+                self.assertEqual(build_training_resume_options("player_q"), [])
+                info = load_training_info(summary.output_path)
+                self.assertIsNotNone(info)
+                self.assertIn("target_episodes", info)
+                self.assertIsNone(info.get("target_episodes"))
+                self.assertEqual(info["completed_episodes"], 1)
+                with summary.run_log_path.open("r", encoding="utf-8-sig") as handle:
+                    last_record = json.loads([line for line in handle if line.strip()][-1])
+                self.assertEqual(last_record["event"], "training_completed")
+                self.assertIsNone(last_record["parameters"]["target_episodes"])
 
     def test_checkpoint_metadata_removes_path_objects(self):
         metadata = checkpoint_metadata(
@@ -276,6 +317,38 @@ class TrainingPlatformTest(unittest.TestCase):
         self.assertEqual(metadata["resume_run_path"], "models/dqn/player/20260611_120000")
         self.assertEqual(metadata["nested"], ["logs/errors/log.jsonl"])
         self.assertFalse(any(isinstance(value, Path) for value in metadata.values()))
+
+    def test_artifact_option_builders_share_model_path_resolution(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp_dir:
+            runs_root = Path(temp_dir) / "runs"
+            latest_root = Path(temp_dir) / "latest"
+            run_dir = runs_root / "20260610_120000"
+            model_path = run_dir / "player_q_model.json"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            LinearQModel.create().save(model_path)
+            (run_dir / "info.json").write_text(
+                json.dumps(
+                    {
+                        "created_at": "2026-06-10T12:00:00",
+                        "training_type": "player_q",
+                        "model_path": "missing/player_q_model.json",
+                        "parameters": {},
+                        "summary": {},
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with self._patched_player_q_roots(runs_root, latest_root):
+                artifact = list_training_artifacts()[0]
+                resolved = model_path_from_info(artifact)
+                artifact_labels = build_training_artifact_labels()
+                evaluation_options = build_evaluation_model_options()
+
+            self.assertEqual(resolved, model_path)
+            self.assertIn(str(model_path), artifact_labels.values())
+            self.assertTrue(any(option.path == model_path for option in evaluation_options))
 
     def test_reference_model_initializes_q_training(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp_dir:
@@ -581,6 +654,46 @@ class TrainingPlatformTest(unittest.TestCase):
                 self.assertTrue(summary.run_log_path.exists())
                 checkpoint = load_torch_checkpoint(torch, summary.output_path, map_location="cpu")
                 self.assertEqual(checkpoint["stability"]["status"], TRAINING_STATUS_INCOMPLETE)
+
+    def test_unlimited_dqn_stop_writes_completed_checkpoint_when_torch_is_available(self):
+        try:
+            import torch
+        except ModuleNotFoundError:
+            self.skipTest("PyTorch is not installed.")
+
+        from domain.train import train_dqn_player
+
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp_dir:
+            runs_root = Path(temp_dir) / "dqn_runs"
+            latest_root = Path(temp_dir) / "dqn_latest"
+            with self._patched_training_roots("player_dqn", runs_root, latest_root):
+                stop_event = threading.Event()
+
+                def stop_after_first(_current, total, _state, _epsilon, _device):
+                    self.assertIsNone(total)
+                    stop_event.set()
+
+                summary = train_dqn_player(
+                    episodes=None,
+                    enemy_type="random",
+                    seed=52,
+                    max_steps=0,
+                    device="cpu",
+                    batch_size=1,
+                    min_replay_size=1,
+                    replay_capacity=10,
+                    target_update_interval=1,
+                    stability={"enabled": False},
+                    stop_event=stop_event,
+                    progress_callback=stop_after_first,
+                )
+
+                self.assertEqual(summary.status, "completed")
+                self.assertIsNone(summary.target_episodes)
+                self.assertTrue(summary.info_path.exists())
+                checkpoint = load_torch_checkpoint(torch, summary.output_path, map_location="cpu")
+                self.assertEqual(checkpoint["stability"]["status"], "completed")
+                self.assertIsNone(checkpoint["stability"]["target_episodes"])
 
     def test_dqn_resume_after_second_stop_keeps_checkpoint_weights_only_loadable(self):
         try:

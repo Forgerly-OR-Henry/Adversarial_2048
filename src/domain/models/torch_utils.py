@@ -33,3 +33,12 @@ def get_torch_device(prefer_cuda: bool = True) -> str:
 def load_torch_checkpoint(torch, path: str | Path, map_location: str | None = None):
     """按安全 weights_only 模式加载本项目 DQN checkpoint。 / Load project DQN checkpoints in safe weights_only mode."""
     return torch.load(path, map_location=map_location, weights_only=True)
+
+
+__all__ = [
+    "TORCH_INSTALL_HINT",
+    "checkpoint_metadata",
+    "get_torch_device",
+    "load_torch_checkpoint",
+    "require_torch",
+]

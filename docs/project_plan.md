@@ -9,7 +9,7 @@
 - 敌人：`random`、`greedy`、`q_enemy`、`dqn_enemy`。
 - CLI 与 Tkinter GUI，共享训练、评估、结果管理和日志逻辑。
 - 轻量 Q-learning 与 PyTorch DQN 训练。
-- 时间戳训练成果、`latest/` 默认模型发布、训练比较、模型合并和自动短轮调参。
+- 时间戳训练成果、结果管理手动设定 `latest/` 默认模型、训练比较、模型合并和自动短轮调参。
 - 标准库 `unittest` 测试，DQN 路径优先用项目虚拟环境验证。
 
 ## 开发原则

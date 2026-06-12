@@ -8,6 +8,10 @@ from tkinter import ttk
 
 from ui.settings.layout.base import FORM_HEIGHT, FORM_WIDTH, lock_widget_size
 
+# 区域面板使用 20 列虚拟网格：行内比例可直接换算为 colspan。
+# 例如 3/6/3/8 表示左标签 3 列、左输入 6 列、右标签 3 列、右输入 8 列；
+# 对应坐标是 col=0/3/9/12，四段 colspan 相加必须等于 20。
+# Area panels use a 20-column virtual grid; ratios map directly to colspan.
 AREA_GRID_COLUMNS = 20
 AREA_GRID_ROWS = 9
 AREA_PANEL_PADDING = 16

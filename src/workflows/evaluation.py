@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from domain.evaluation import default_experiment_path, experiment_csv_filename
-from domain.train.artifacts import TRAINING_MODEL_FILENAMES, latest_training_output_path, list_training_artifacts
+from domain.train.artifacts import (
+    TRAINING_MODEL_FILENAMES,
+    latest_training_output_path,
+    list_training_artifacts,
+    model_path_from_info,
+)
 
 EVALUATION_TARGETS = ("auto_player", "player", "auto_enemy", "enemy")
 AUTO_PLAYER_TYPES = ("heuristic", "q_ai", "dqn_player")
@@ -100,7 +104,7 @@ def build_evaluation_model_options() -> list[EvaluationModelOption]:
         training_type = str(artifact.get("training_type", ""))
         if training_type not in TRAINING_TYPE_TO_EVALUATION_TYPE:
             continue
-        model_path = _artifact_model_path(artifact)
+        model_path = model_path_from_info(artifact)
         if model_path is None or not model_path.exists():
             continue
         _append_model_option(
@@ -199,21 +203,6 @@ def _append_model_option(
             created_at=created_at,
         )
     )
-
-
-def _artifact_model_path(artifact: dict[str, Any]) -> Path | None:
-    value = artifact.get("model_path")
-    if not value:
-        return None
-    model_path = Path(str(value))
-    if model_path.exists():
-        return model_path
-    info_path = artifact.get("info_path")
-    if info_path:
-        sibling = Path(str(info_path)).parent / model_path.name
-        if sibling.exists():
-            return sibling
-    return model_path
 
 
 __all__ = [

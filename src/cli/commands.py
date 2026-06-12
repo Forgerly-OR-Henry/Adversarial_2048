@@ -79,7 +79,7 @@ def dispatch(args: argparse.Namespace) -> None:
             )
             print(f"Saved {args.episodes} episodes to {output_path}")
         elif args.command == "gui":
-            run_gui(enemy_type=args.enemy)
+            run_gui(player_type=args.player, enemy_type=args.enemy)
         elif args.command == "train-player":
             summary = train_q_player(
                 episodes=args.episodes,
@@ -138,7 +138,6 @@ def dispatch(args: argparse.Namespace) -> None:
                 artifact_b=args.b,
                 output=args.output,
                 weight_a=args.weight_a,
-                publish_latest=args.publish_latest,
             )
             _print_json(summary)
         elif args.command == "training-tune":

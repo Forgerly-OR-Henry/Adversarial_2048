@@ -1,16 +1,18 @@
-"""训练产物路径、信息文件、latest 发布和查询工具。 / Training artifact paths, info files, latest publishing, and lookup helpers."""
+"""训练产物路径、信息文件和查询工具。 / Training artifact paths, info files, and lookup helpers."""
 
 from __future__ import annotations
 
 import json
 import shutil
 import time
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from config import PROJECT_ROOT, get_train_defaults
 from utils.serialization import json_ready, project_relative_path
+from utils.training_log import log_training_result
 
 
 TRAINING_MODEL_FILENAMES = {
@@ -96,15 +98,28 @@ def latest_training_output_path(training_type: str) -> Path:
 def resolve_training_output(
     training_type: str,
     output: str | Path | None,
-) -> tuple[Path, Path | None, Path]:
+) -> tuple[Path, Path | None]:
     """解析显式输出或默认训练输出路径。 / Resolve explicit or default training output paths."""
-    latest_path = latest_training_output_path(training_type)
     if output is not None and str(output).strip():
         output_path = Path(output)
-        return output_path, _run_directory_for_explicit_output(training_type, output_path), latest_path
+        _ensure_not_latest_output(training_type, output_path)
+        return output_path, _run_directory_for_explicit_output(training_type, output_path)
 
     output_path = default_training_output_path(training_type)
-    return output_path, output_path.parent, latest_path
+    return output_path, output_path.parent
+
+
+def _ensure_not_latest_output(training_type: str, output_path: Path) -> None:
+    """禁止训练直接写 latest 路径。 / Prevent training from writing directly to latest paths."""
+    latest_path = latest_training_output_path(training_type)
+    latest_directory = latest_path.parent
+    try:
+        resolved_output = output_path.resolve()
+        resolved_latest_directory = latest_directory.resolve()
+        resolved_output.relative_to(resolved_latest_directory)
+    except (OSError, ValueError):
+        return
+    raise ValueError("latest 目录只能在结果管理中手动指定。")
 
 
 def _run_directory_for_explicit_output(training_type: str, output_path: Path) -> Path | None:
@@ -137,6 +152,7 @@ def write_training_info(
     reference_model_path: str | Path | None = None,
     resume_run_path: str | Path | None = None,
     run_log_path: str | Path | None = None,
+    include_target_episodes: bool = False,
 ) -> Path:
     """写出训练产物信息文件。 / Write an info file for a training artifact."""
     run_directory.mkdir(parents=True, exist_ok=True)
@@ -150,7 +166,7 @@ def write_training_info(
         "parameters": parameters,
         "summary": summary,
     }
-    if target_episodes is not None:
+    if target_episodes is not None or include_target_episodes:
         payload["target_episodes"] = target_episodes
     if completed_episodes is not None:
         payload["completed_episodes"] = completed_episodes
@@ -165,12 +181,6 @@ def write_training_info(
     with info_path.open("w", encoding="utf-8") as handle:
         json.dump(json_ready(payload, sanitize_paths=True), handle, ensure_ascii=False, indent=2, sort_keys=True)
     return info_path
-
-
-def publish_latest(model_path: Path, latest_path: Path) -> Path:
-    """把训练模型发布到 latest 默认路径。 / Publish a trained model to the default latest path."""
-    replace_latest_model(model_path, latest_path)
-    return latest_path
 
 
 def replace_latest_model(source_model_path: Path, latest_model_path: Path) -> bool:
@@ -200,10 +210,8 @@ def finalize_training_artifact(
     training_type: str,
     model_path: Path,
     run_directory: Path | None,
-    latest_path: Path,
     parameters: dict[str, Any],
     summary: Any,
-    publish: bool,
     source: str = "training",
     extra: dict[str, Any] | None = None,
     status: str = TRAINING_STATUS_COMPLETED,
@@ -212,8 +220,8 @@ def finalize_training_artifact(
     reference_model_path: str | Path | None = None,
     resume_run_path: str | Path | None = None,
     run_log_path: str | Path | None = None,
-) -> tuple[Path | None, Path | None]:
-    """写信息文件并按需发布 latest。 / Write the info file and optionally publish latest."""
+) -> Path | None:
+    """写出训练产物信息文件。 / Write the training artifact info file."""
     info_path = None
     if run_directory is not None:
         info_path = write_training_info(
@@ -230,9 +238,50 @@ def finalize_training_artifact(
             reference_model_path=reference_model_path,
             resume_run_path=resume_run_path,
             run_log_path=run_log_path,
+            include_target_episodes=source == "training",
         )
-    published_path = publish_latest(model_path, latest_path) if publish else None
-    return info_path, published_path
+    return info_path
+
+
+def complete_training_artifact(
+    *,
+    training_type: str,
+    model_path: Path,
+    run_directory: Path | None,
+    parameters: dict[str, Any],
+    summary: Any,
+    status: str,
+    target_episodes: int | None,
+    completed_episodes: int,
+    reference_model_path: str | Path | None,
+    resume_run_path: str | Path | None,
+    run_log_path: Path | None,
+) -> Any:
+    """完成训练产物收尾：写 info、记日志并清理旧续训目录。 / Finish info, logs, and resume cleanup."""
+    info_path = finalize_training_artifact(
+        training_type=training_type,
+        model_path=model_path,
+        run_directory=run_directory,
+        parameters=parameters,
+        summary=summary,
+        status=status,
+        target_episodes=target_episodes,
+        completed_episodes=completed_episodes,
+        reference_model_path=reference_model_path,
+        resume_run_path=resume_run_path,
+        run_log_path=run_log_path,
+    )
+    if info_path is not None:
+        summary = replace(summary, info_path=info_path)
+    log_training_result(
+        training_type,
+        parameters,
+        summary,
+        path=run_log_path or model_path.with_name(TRAINING_RUN_LOG_FILENAME),
+        event="training_stopped" if status == TRAINING_STATUS_INCOMPLETE else "training_completed",
+    )
+    cleanup_resumed_incomplete_run(resume_run_path, run_directory)
+    return summary
 
 
 def load_training_info(path: str | Path) -> dict[str, Any] | None:
@@ -280,7 +329,7 @@ def model_path_from_info(info: dict[str, Any]) -> Path | None:
 def resume_training_context(
     training_type: str,
     resume_run_path: str | Path | None,
-    target_episodes: int,
+    target_episodes: int | None,
     reference_model_path: str | Path | None,
 ) -> tuple[int, Path | None, Path | None, dict[str, Any] | None]:
     """解析续训来源并返回已完成局数和已选参考模型。 / Resolve resume metadata and selected reference."""
@@ -297,7 +346,7 @@ def resume_training_context(
         raise ValueError("Only incomplete training runs can be resumed.")
 
     completed = int(info.get("completed_episodes") or 0)
-    if target_episodes < completed:
+    if target_episodes is not None and target_episodes < completed:
         raise ValueError("继续训练总局数不能低于当前已训练局数。")
 
     selected_reference = Path(reference_model_path) if reference_model_path is not None else None

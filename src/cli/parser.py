@@ -34,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     auto.add_argument("--output", default=evaluate_defaults.get("output"))
 
     gui = subparsers.add_parser("gui", help="Start the Tkinter GUI.")
-    gui.add_argument("--player", choices=["human", "heuristic", "q_ai", "dqn_player"], default=ui_defaults["player"])
+    gui.add_argument("--player", choices=["heuristic", "q_ai", "dqn_player"], default=ui_defaults["player"])
     gui.add_argument("--enemy", choices=enemy_choices, default=ui_defaults["enemy"])
 
     _add_training_parser(
@@ -85,7 +85,6 @@ def build_parser() -> argparse.ArgumentParser:
     training_merge.add_argument("--b", required=True)
     training_merge.add_argument("--output", default=None)
     training_merge.add_argument("--weight-a", type=float, default=0.5)
-    training_merge.add_argument("--publish-latest", action="store_true")
 
     training_tune = subparsers.add_parser("training-tune", help="Run automatic short tuning trials.")
     training_tune.add_argument("--target", choices=["player", "enemy"], required=True)
@@ -108,7 +107,7 @@ def _add_training_parser(
     opponent_choices: list[str],
 ) -> argparse.ArgumentParser:
     parser = subparsers.add_parser(command, help=help_text)
-    parser.add_argument("--episodes", type=int, default=defaults["episodes"])
+    parser.add_argument("--episodes", type=int, default=None)
     parser.add_argument(f"--{opponent_argument}", choices=opponent_choices, default=defaults[opponent_argument])
     parser.add_argument("--seed", type=int, default=defaults.get("seed"))
     parser.add_argument("--output", default=None)

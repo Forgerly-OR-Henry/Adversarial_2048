@@ -21,6 +21,7 @@ python src/main.py
 常用 CLI：
 
 ```powershell
+python src/main.py gui --player q_ai --enemy greedy
 python src/main.py play --enemy random
 python src/main.py auto --player heuristic --enemy random --episodes 100
 python src/main.py auto --player q_ai --enemy q_enemy --episodes 100
@@ -38,18 +39,18 @@ python src/main.py training-tune --target player --algorithm q_learning
 
 GUI 包含四个工作区：
 
-- `对局`：手动玩、AI 单步、自动播放，并切换当前敌人。
+- `对局`：手动玩、AI 单步、自动播放，并切换自动玩家和当前敌人。
 - `单项评估平台`：选择自动玩家、自动敌人或某次训练成果运行评估。
-- `模型训练`：训练玩家 AI 或敌对 AI，支持参考模型、继续训练、停止并保存未完成进度。
+- `模型训练`：训练玩家 AI 或敌对 AI，支持参考模型、继续训练；有限训练提前停止会保存未完成进度，训练局数留空时会无限训练并在手动停止后保存为已完成结果。
 - `训练评估平台`：比较两次训练成果、合并同类型模型、运行调参候选。
 
-主窗口还提供结果管理和系统日志清理。`latest/` 模型是当前默认加载入口，删除或替换前需要明确确认。
+主窗口还提供结果管理和系统日志清理。`latest/` 模型是当前默认加载入口，只能在结果管理中手动设定；删除或替换前需要明确确认。
 
 ## 策略类型
 
 玩家类型：
 
-- `human`：人类玩家，用于 `play` 和 GUI。
+- `human`：人类玩家，用于 `play`；GUI 中方向键 / WASD 始终支持人工操作，`gui --player` 只选择对局面板的初始自动玩家。
 - `random`：随机合法动作。
 - `heuristic`：一层启发式搜索，按空格、合并机会、最大块、角落、单调性和得分增量评分。
 - `q_ai`：轻量 Q-learning 玩家，默认加载 `models/q_learning/player/latest/player_q_model.json`。
@@ -84,12 +85,14 @@ configs/
 关键路径字段：
 
 - `runs_directory`：某类训练成果的历史目录。
-- `latest_output_directory`：某类训练成果发布为默认模型的 `latest/` 目录。
+- `latest_output_directory`：某类训练成果在结果管理中手动设为默认模型时使用的 `latest/` 目录。
 - `outputs.experiments_directory`：正式评估 CSV 的输出根目录。
 - `logs.directory`：系统日志根目录。
 - `logs.errors_directory`：错误日志目录。
 
-CLI 参数可以覆盖 YAML 默认值。例如 `--episodes`、`--learning-rate`、`--gamma` 和 `--output` 只影响当次运行。`--output` 是显式输出路径，不是 YAML 配置字段。
+CLI 参数可以覆盖 YAML 默认值。例如 `--episodes`、`--learning-rate`、`--gamma` 和 `--output` 只影响当次运行。训练命令不传 `--episodes` 时会无限训练，直到 `Ctrl+C` 或其他停止信号保存结果。`--output` 是显式输出路径，不是 YAML 配置字段。
+
+`configs/ui/default.yaml` 中的 `player` 是 GUI 启动后的自动玩家默认值，默认 `heuristic`；不传参数的 GUI 和 `gui` 不带 `--player` 时都会使用该默认值。
 
 ## 训练与评估产物
 
@@ -106,7 +109,6 @@ outputs/experiments/<timestamp>/log.jsonl
 models/q_learning/player/<timestamp>/player_q_model.json
 models/q_learning/player/<timestamp>/info.json
 models/q_learning/player/<timestamp>/log.jsonl
-models/q_learning/player/latest/player_q_model.json
 ```
 
 DQN 训练还会按稳定性配置保存旁路 checkpoint：
@@ -116,7 +118,7 @@ player_dqn_model_best.pt
 player_dqn_model_checkpoint.pt
 ```
 
-继续训练只接受同类型未完成训练目录。新的继续训练保存成功后，会删除旧的未完成目录；完整参考模型只作为初始化权重来源，不会被自动删除。
+训练不会自动写入 `latest/`；需要把某个历史训练成果设为默认模型时，在结果管理中选择该训练结果并点击 `设为 latest`。继续训练只接受同类型未完成训练目录。新的继续训练保存成功后，会删除旧的未完成目录；完整参考模型只作为初始化权重来源，不会被自动删除。
 
 ## PyTorch / GPU
 

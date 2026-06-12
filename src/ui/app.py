@@ -42,7 +42,7 @@ UI_DEFAULTS = get_ui_defaults()
 
 class Adversarial2048App:
     """Tkinter 应用根对象和共享状态容器。 / Root Tkinter application object and shared state container."""
-    def __init__(self, root: tk.Tk, enemy_type: str | None = None):
+    def __init__(self, root: tk.Tk, player_type: str | None = None, enemy_type: str | None = None):
         self.root = root
         self.root.title("敌对版 2048")
         apply_theme(self.root)
@@ -52,6 +52,7 @@ class Adversarial2048App:
         self.root.resizable(False, False)
 
         self.ui_defaults = UI_DEFAULTS
+        self.initial_player_type = player_type or self.ui_defaults["player"]
         self.initial_enemy_type = enemy_type or self.ui_defaults["enemy"]
         self.active_panel = tk.StringVar(value="对局")
         self.result_manager_window = None
@@ -255,9 +256,9 @@ class Adversarial2048App:
         self.update_score_display(score, steps, max_tile, source)
 
 
-def run_gui(enemy_type: str | None = None) -> None:
+def run_gui(player_type: str | None = None, enemy_type: str | None = None) -> None:
     """启动 Tkinter GUI 主循环。 / Start the Tkinter GUI main loop."""
     enable_high_dpi()
     root = tk.Tk()
-    Adversarial2048App(root, enemy_type=enemy_type)
+    Adversarial2048App(root, player_type=player_type, enemy_type=enemy_type)
     root.mainloop()

@@ -473,15 +473,6 @@ def _is_relative_to(path: Path, root: Path) -> bool:
     return True
 
 
-def _load_json(path: Path) -> dict[str, Any] | None:
-    try:
-        with path.open("r", encoding="utf-8-sig") as handle:
-            loaded = json.load(handle)
-    except (OSError, json.JSONDecodeError):
-        return None
-    return loaded if isinstance(loaded, dict) else None
-
-
 def _created_at(info: dict[str, Any] | None, fallback: Path) -> str:
     if isinstance(info, dict) and info.get("created_at"):
         return str(info["created_at"])

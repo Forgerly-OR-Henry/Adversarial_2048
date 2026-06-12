@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import csv
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from unittest.mock import patch
 from pathlib import Path
 
 import tests._path  # noqa: F401
@@ -124,6 +127,33 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(auto_args.enemy, "random")
         self.assertEqual(gui_args.enemy, "random")
         self.assertEqual(train_args.enemy, "random")
+        self.assertIsNone(train_args.episodes)
+
+    def test_gui_player_selects_initial_automatic_player(self):
+        args = build_parser().parse_args(["gui", "--player", "q_ai", "--enemy", "greedy"])
+        self.assertEqual(args.player, "q_ai")
+        self.assertEqual(args.enemy, "greedy")
+        with patch("cli.commands.run_gui") as mocked_run_gui:
+            from cli.commands import dispatch
+
+            dispatch(args)
+        mocked_run_gui.assert_called_once_with(player_type="q_ai", enemy_type="greedy")
+
+    def test_gui_player_defaults_to_heuristic_and_rejects_human(self):
+        parser = build_parser()
+        args = parser.parse_args(["gui"])
+        self.assertEqual(args.player, "heuristic")
+        with self.assertRaises(SystemExit):
+            with redirect_stderr(io.StringIO()):
+                parser.parse_args(["gui", "--player", "human"])
+
+    def test_training_merge_parser_has_no_latest_publish_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["training-merge", "--a", "a.json", "--b", "b.json"])
+        self.assertFalse(hasattr(args, "publish_latest"))
+        with self.assertRaises(SystemExit):
+            with redirect_stderr(io.StringIO()):
+                parser.parse_args(["training-merge", "--a", "a.json", "--b", "b.json", "--publish-latest"])
 
     def test_import_main_does_not_eagerly_load_torch(self):
         command = [

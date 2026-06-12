@@ -19,7 +19,7 @@ from ui.components import (
     create_text_entry,
     set_button_visual,
 )
-from ui.panels.shared import display_timestamp, make_grid_placer, unique_label
+from ui.panels.shared import create_field_label, display_timestamp, make_grid_placer, unique_label
 from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import (
     EVALUATION_TARGET_LABELS,
@@ -87,7 +87,7 @@ class EvaluationPanel:
         experiment, area = create_area_panel(parent, "单项评估平台设置")
         place = make_grid_placer(area)
 
-        place(ttk.Label(experiment, text="评估对象"), 0, 0, colspan=3, sticky="w")
+        place(create_field_label(experiment, text="评估对象"), 0, 0, colspan=3)
         place(
             create_select(
                 experiment,
@@ -101,13 +101,13 @@ class EvaluationPanel:
             colspan=7,
         )
 
-        place(ttk.Label(experiment, textvariable=self.opponent_label), 0, 10, colspan=3, sticky="w")
+        place(create_field_label(experiment, textvariable=self.opponent_label), 0, 10, colspan=3)
         self.opponent_select_host = ttk.Frame(experiment, style="Panel.TFrame")
         self.opponent_select_host.columnconfigure(0, weight=1)
         self.opponent_select_host.rowconfigure(0, weight=1)
         place(self.opponent_select_host, 0, 13, colspan=7)
 
-        place(ttk.Label(experiment, textvariable=self.model_label), 1, 0, colspan=3, sticky="w")
+        place(create_field_label(experiment, textvariable=self.model_label), 1, 0, colspan=3)
         self.model_select_host = ttk.Frame(experiment, style="Panel.TFrame")
         self.model_select_host.columnconfigure(0, weight=1)
         self.model_select_host.columnconfigure(1, weight=0, minsize=96)
@@ -122,7 +122,11 @@ class EvaluationPanel:
         )
         refresh_button.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
 
-        place(ttk.Label(experiment, text="局数"), 2, 0, colspan=3, sticky="w")
+        # 本行使用 20 列网格比例 3/6/3/8：
+        # 左标签 0-3，左输入 3-9，右标签 9-12，右输入 12-20。
+        # 若要调整宽度，保持四段相加为 20，并同步修改后续 col/colspan。
+        # This row uses a 20-column 3/6/3/8 ratio; keep the spans summing to 20.
+        place(create_field_label(experiment, text="局数"), 2, 0, colspan=3)
         place(
             create_stepper(
                 experiment,
@@ -134,13 +138,13 @@ class EvaluationPanel:
             ),
             2,
             3,
-            colspan=7,
+            colspan=6,
         )
 
-        place(ttk.Label(experiment, text="随机种子"), 2, 10, colspan=3, sticky="w")
-        place(create_text_entry(experiment, self.seed, **GRID_CONTROL_OPTIONS), 2, 13, colspan=7)
+        place(create_field_label(experiment, text="随机种子"), 2, 9, colspan=3)
+        place(create_text_entry(experiment, self.seed, **GRID_CONTROL_OPTIONS), 2, 12, colspan=8)
 
-        place(ttk.Label(experiment, text="输出目录"), 3, 0, colspan=3, sticky="w")
+        place(create_field_label(experiment, text="输出目录"), 3, 0, colspan=3)
         place(create_text_entry(experiment, self.output, **GRID_CONTROL_OPTIONS), 3, 3, colspan=17)
 
         self.button = create_action_button(experiment, text="运行单项评估", command=self.start)

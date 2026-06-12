@@ -17,7 +17,7 @@ from ui.components import (
     create_select,
     set_button_visual,
 )
-from ui.panels.shared import make_grid_placer
+from ui.panels.shared import create_field_label, make_grid_placer
 from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import ENEMY_LABELS, ENEMY_TYPES_BY_LABEL, PLAYER_LABELS, PLAYER_TYPES_BY_LABEL
 from ui.settings.theme import BUTTON_NORMAL, BUTTON_PRESSED
@@ -25,21 +25,22 @@ from ui.settings.theme import BUTTON_NORMAL, BUTTON_PRESSED
 
 class GamePanel:
     """对局模式的界面状态和操作控制器。 / UI state and action controller for gameplay mode."""
-    def __init__(self, app: Any, parent: ttk.Frame, enemy_type: str):
+    def __init__(self, app: Any, parent: ttk.Frame, player_type: str, enemy_type: str):
         self.app = app
         self.enemy_type = tk.StringVar(value=ENEMY_LABELS[enemy_type])
         self.status = tk.StringVar(value="")
-        self.ai_player_type = tk.StringVar(value=PLAYER_LABELS["heuristic"])
+        self.ai_player_type = tk.StringVar(value=PLAYER_LABELS[player_type])
         self.autoplaying = False
         self.player = create_player("heuristic", rng=self.app.rng)
 
         self._build(parent)
+        self.reload_ai_player()
 
     def _build(self, parent: ttk.Frame) -> None:
         controls, area = create_area_panel(parent, "对局控制")
         place = make_grid_placer(area)
 
-        place(ttk.Label(controls, text="本局敌人"), 0, 0, colspan=3, sticky="w")
+        place(create_field_label(controls, text="本局敌人"), 0, 0, colspan=3)
         enemy_menu = create_select(
             controls,
             self.enemy_type,
@@ -49,7 +50,7 @@ class GamePanel:
         )
         place(enemy_menu, 0, 3, colspan=17)
 
-        place(ttk.Label(controls, text="自动玩家"), 1, 0, colspan=3, sticky="w")
+        place(create_field_label(controls, text="自动玩家"), 1, 0, colspan=3)
         place(
             create_select(
                 controls,
@@ -174,7 +175,7 @@ class GamePanel:
 
 def build_game_panel(app: Any, parent: ttk.Frame) -> GamePanel:
     """创建对局控制面板。 / Build the gameplay control panel."""
-    return GamePanel(app, parent, app.initial_enemy_type)
+    return GamePanel(app, parent, app.initial_player_type, app.initial_enemy_type)
 
 
 __all__ = ["GamePanel", "build_game_panel"]

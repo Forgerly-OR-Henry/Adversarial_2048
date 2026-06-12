@@ -10,7 +10,7 @@ from tkinter import ttk
 
 from domain.evaluation import compare_training_artifacts
 from domain.train import list_training_artifacts, merge_training_artifacts, run_auto_tuning
-from domain.train.artifacts import TRAINING_MODEL_FILENAMES, latest_training_output_path
+from domain.train.artifacts import TRAINING_MODEL_FILENAMES, latest_training_output_path, model_path_from_info
 from ui.components import (
     GRID_CONTROL_OPTIONS,
     create_action_button,
@@ -20,7 +20,7 @@ from ui.components import (
     create_text_entry,
     set_button_visual,
 )
-from ui.panels.shared import display_timestamp, make_grid_placer, unique_label
+from ui.panels.shared import create_field_label, display_timestamp, make_grid_placer, unique_label
 from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import TRAINING_ALGORITHM_LABELS, TRAINING_TARGET_LABELS, TRAINING_TYPE_LABELS
 from ui.settings.theme import BUTTON_BUSY, BUTTON_NORMAL
@@ -38,7 +38,7 @@ def build_training_artifact_labels() -> dict[str, str]:
             _append_artifact_label(labels, training_type, "latest", str(latest_path))
 
     for artifact in list_training_artifacts():
-        model_path = _artifact_model_path(artifact)
+        model_path = model_path_from_info(artifact)
         if model_path is None:
             continue
         training_type = str(artifact.get("training_type", "unknown"))
@@ -58,13 +58,6 @@ def _append_artifact_label(
         f"{TRAINING_TYPE_LABELS.get(training_type, training_type)} | {display_timestamp(created_at)}",
     )
     labels[label] = model_path
-
-
-def _artifact_model_path(artifact: dict[str, Any]) -> str | None:
-    value = artifact.get("model_path")
-    if not value:
-        return None
-    return str(value)
 
 
 class TrainingPlatformPanel:
@@ -92,7 +85,7 @@ class TrainingPlatformPanel:
         self.platform, self._area_grid = create_area_panel(parent, "训练智能评估平台")
         place = make_grid_placer(self._area_grid)
 
-        place(ttk.Label(self.platform, text="训练成果 A"), 0, 0, colspan=3, sticky="w")
+        place(create_field_label(self.platform, text="训练成果 A"), 0, 0, colspan=3)
         self.artifact_a_select = create_select(
             self.platform,
             self.artifact_a,
@@ -101,7 +94,7 @@ class TrainingPlatformPanel:
         )
         place(self.artifact_a_select, 0, 3, colspan=17)
 
-        place(ttk.Label(self.platform, text="训练成果 B"), 1, 0, colspan=3, sticky="w")
+        place(create_field_label(self.platform, text="训练成果 B"), 1, 0, colspan=3)
         self.artifact_b_select = create_select(
             self.platform,
             self.artifact_b,
@@ -110,24 +103,24 @@ class TrainingPlatformPanel:
         )
         place(self.artifact_b_select, 1, 3, colspan=17)
 
-        place(ttk.Label(self.platform, text="评估局数"), 2, 0, colspan=3, sticky="w")
+        place(create_field_label(self.platform, text="评估局数"), 2, 0, colspan=3)
         place(
             create_stepper(self.platform, self.episodes, from_=1, to=100000, width=10, **GRID_CONTROL_OPTIONS),
             2,
             3,
             colspan=7,
         )
-        place(ttk.Label(self.platform, text="随机种子"), 2, 10, colspan=3, sticky="w")
+        place(create_field_label(self.platform, text="随机种子"), 2, 10, colspan=3)
         place(create_text_entry(self.platform, self.seed, **GRID_CONTROL_OPTIONS), 2, 13, colspan=7)
 
-        place(ttk.Label(self.platform, text="调参对象"), 3, 0, colspan=3, sticky="w")
+        place(create_field_label(self.platform, text="调参对象"), 3, 0, colspan=3)
         place(
             create_select(self.platform, self.target, tuple(TRAINING_TARGET_LABELS.values()), **GRID_CONTROL_OPTIONS),
             3,
             3,
             colspan=7,
         )
-        place(ttk.Label(self.platform, text="调参算法"), 3, 10, colspan=3, sticky="w")
+        place(create_field_label(self.platform, text="调参算法"), 3, 10, colspan=3)
         place(
             create_select(
                 self.platform,

@@ -1,4 +1,4 @@
-"""训练产物合并和发布。 / Training artifact merging and publishing."""
+"""训练产物合并。 / Training artifact merging."""
 
 from __future__ import annotations
 
@@ -21,7 +21,6 @@ class MergeSummary:
     artifact_b: Path
     weight_a: float
     weight_b: float
-    latest_output_path: Path | None = None
     info_path: Path | None = None
 
 
@@ -30,7 +29,6 @@ def merge_training_artifacts(
     artifact_b: str | Path,
     output: str | Path | None = None,
     weight_a: float = 0.5,
-    publish_latest: bool = False,
 ) -> MergeSummary:
     """合并两个兼容的训练产物。 / Merge two compatible training artifacts."""
     if not 0.0 <= weight_a <= 1.0:
@@ -40,7 +38,7 @@ def merge_training_artifacts(
     if info_a.training_type != info_b.training_type:
         raise ValueError("Can only merge artifacts with the same training type.")
 
-    output_path, run_directory, latest_path = resolve_training_output(info_a.training_type, output)
+    output_path, run_directory = resolve_training_output(info_a.training_type, output)
     if output is not None and str(output).strip():
         run_directory = output_path.parent
     weight_b = 1.0 - weight_a
@@ -56,23 +54,19 @@ def merge_training_artifacts(
         artifact_b=info_b.path,
         weight_a=weight_a,
         weight_b=weight_b,
-        latest_output_path=latest_path if publish_latest else None,
         info_path=run_directory / "info.json" if run_directory is not None else None,
     )
-    info_path, published_path = finalize_training_artifact(
+    info_path = finalize_training_artifact(
         training_type=info_a.training_type,
         model_path=output_path,
         run_directory=run_directory,
-        latest_path=latest_path,
         parameters={
             "artifact_a": info_a.path,
             "artifact_b": info_b.path,
             "weight_a": weight_a,
             "weight_b": weight_b,
-            "publish_latest": publish_latest,
         },
         summary=summary,
-        publish=publish_latest,
         source="merge",
     )
     return MergeSummary(
@@ -82,7 +76,6 @@ def merge_training_artifacts(
         artifact_b=summary.artifact_b,
         weight_a=summary.weight_a,
         weight_b=summary.weight_b,
-        latest_output_path=published_path,
         info_path=info_path,
     )
 

@@ -23,7 +23,7 @@ from ui.components import (
     create_text_entry,
     set_button_visual,
 )
-from ui.panels.shared import display_timestamp, make_grid_placer, unique_label
+from ui.panels.shared import create_field_label, display_timestamp, make_grid_placer, unique_label
 from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import (
     ENEMY_LABELS,
@@ -33,6 +33,7 @@ from ui.settings.options import (
     PLAYER_LABELS,
     PLAYER_TYPES_BY_LABEL,
     REFERENCE_TYPE_OPTIONS,
+    REFERENCE_TYPES_BY_LABEL,
     TRAINING_ALGORITHM_LABELS,
     TRAINING_TARGET_LABELS,
     TRAINING_TYPE_LABELS,
@@ -44,6 +45,7 @@ from workflows.training import (
     default_enemy_type_for_algorithm,
     default_player_type_for_algorithm,
     default_training_output_directory,
+    REFERENCE_TYPE_INITIAL_WEIGHTS,
     training_output_model_path,
 )
 from utils.training_log import log_error
@@ -59,7 +61,7 @@ class TrainingPanel:
         self.algorithm = tk.StringVar(value=TRAINING_ALGORITHM_LABELS[defaults["algorithm"]])
         self.enemy_type = tk.StringVar(value=ENEMY_LABELS[self._default_enemy_type()])
         self.player_type = tk.StringVar(value=PLAYER_LABELS[self._default_player_type()])
-        self.episodes = tk.IntVar(value=defaults["episodes"])
+        self.episodes = tk.StringVar(value=str(defaults["episodes"]))
         self.seed = tk.StringVar(value=defaults["seed"] or "")
         self._auto_output = True
         self._updating_output = False
@@ -77,6 +79,7 @@ class TrainingPanel:
         self.progress = tk.IntVar(value=0)
         self.running = False
         self.stop_event: threading.Event | None = None
+        self.unlimited_training = False
         self.queue: Queue[tuple[str, object]] = Queue()
         self.latest_preview: tuple[list[list[int]], int, int, int] | None = None
 
@@ -87,7 +90,11 @@ class TrainingPanel:
         training, area = create_area_panel(parent, "模型训练设置")
         place = make_grid_placer(area)
 
-        place(ttk.Label(training, text="训练对象"), 0, 0, colspan=3, sticky="w")
+        # 本行使用 20 列网格比例 3/6/3/8：
+        # 左标签 0-3，左输入 3-9，右标签 9-12，右输入 12-20。
+        # 若要调整宽度，保持四段相加为 20，并同步修改后续 col/colspan。
+        # This row uses a 20-column 3/6/3/8 ratio; keep the spans summing to 20.
+        place(create_field_label(training, text="训练对象"), 0, 0, colspan=3)
         place(
             create_select(
                 training,
@@ -98,9 +105,9 @@ class TrainingPanel:
             ),
             0,
             3,
-            colspan=7,
+            colspan=6,
         )
-        place(ttk.Label(training, text="算法"), 0, 10, colspan=3, sticky="w")
+        place(create_field_label(training, text="算法"), 0, 9, colspan=3)
         place(
             create_select(
                 training,
@@ -110,12 +117,12 @@ class TrainingPanel:
                 **GRID_CONTROL_OPTIONS,
             ),
             0,
-            13,
-            colspan=7,
+            12,
+            colspan=8,
         )
 
-        self.enemy_label = ttk.Label(training, text="对手敌人")
-        place(self.enemy_label, 1, 0, colspan=3, sticky="w")
+        self.enemy_label = create_field_label(training, text="对手敌人")
+        place(self.enemy_label, 1, 0, colspan=3)
         self.enemy_menu = create_select(
             training,
             self.enemy_type,
@@ -124,8 +131,8 @@ class TrainingPanel:
         )
         place(self.enemy_menu, 1, 3, colspan=17)
 
-        self.player_label = ttk.Label(training, text="固定玩家")
-        place(self.player_label, 1, 0, colspan=3, sticky="w")
+        self.player_label = create_field_label(training, text="固定玩家")
+        place(self.player_label, 1, 0, colspan=3)
         self.player_menu = create_select(
             training,
             self.player_type,
@@ -134,7 +141,9 @@ class TrainingPanel:
         )
         place(self.player_menu, 1, 3, colspan=17)
 
-        place(ttk.Label(training, text="训练局数"), 2, 0, colspan=3, sticky="w")
+        # 同样使用 3/6/3/8，方便“训练局数/随机种子”与上方选择行对齐。
+        # Same 3/6/3/8 ratio to align episode and seed controls with the selectors above.
+        place(create_field_label(training, text="训练局数"), 2, 0, colspan=3)
         place(
             create_stepper(
                 training,
@@ -146,17 +155,17 @@ class TrainingPanel:
             ),
             2,
             3,
-            colspan=7,
+            colspan=6,
         )
-        place(ttk.Label(training, text="随机种子"), 2, 10, colspan=3, sticky="w")
-        place(create_text_entry(training, self.seed, **GRID_CONTROL_OPTIONS), 2, 13, colspan=7)
+        place(create_field_label(training, text="随机种子"), 2, 9, colspan=3)
+        place(create_text_entry(training, self.seed, **GRID_CONTROL_OPTIONS), 2, 12, colspan=8)
 
-        place(ttk.Label(training, text="参考模型"), 3, 0, colspan=3, sticky="w")
+        place(create_field_label(training, text="参考模型"), 3, 0, colspan=3)
         self.reference_select_host = ttk.Frame(training, style="Panel.TFrame")
         self.reference_select_host.columnconfigure(0, weight=1)
         self.reference_select_host.rowconfigure(0, weight=1)
         place(self.reference_select_host, 3, 3, colspan=10)
-        place(ttk.Label(training, text="参考类型"), 3, 13, colspan=3, sticky="w")
+        place(create_field_label(training, text="参考类型"), 3, 13, colspan=3)
         place(
             create_select(
                 training,
@@ -169,13 +178,13 @@ class TrainingPanel:
             colspan=4,
         )
 
-        place(ttk.Label(training, text="继续训练"), 4, 0, colspan=3, sticky="w")
+        place(create_field_label(training, text="继续训练"), 4, 0, colspan=3)
         self.resume_select_host = ttk.Frame(training, style="Panel.TFrame")
         self.resume_select_host.columnconfigure(0, weight=1)
         self.resume_select_host.rowconfigure(0, weight=1)
         place(self.resume_select_host, 4, 3, colspan=17)
 
-        place(ttk.Label(training, text="输出目录"), 5, 0, colspan=3, sticky="w")
+        place(create_field_label(training, text="输出目录"), 5, 0, colspan=3)
         place(create_text_entry(training, self.output, **GRID_CONTROL_OPTIONS), 5, 3, colspan=17)
 
         self.button = create_action_button(training, text="训练 AI 模型", command=self.start)
@@ -217,14 +226,18 @@ class TrainingPanel:
             self.stop()
             return
 
-        try:
-            episodes = int(self.episodes.get())
-        except (TypeError, ValueError, tk.TclError):
-            self.status.set("训练局数必须是正整数。")
-            return
-        if episodes < 1:
-            self.status.set("训练局数至少为 1。")
-            return
+        episodes_text = self.episodes.get().strip()
+        if episodes_text:
+            try:
+                episodes: int | None = int(episodes_text)
+            except (TypeError, ValueError, tk.TclError):
+                self.status.set("训练局数必须是正整数，或留空表示无限训练。")
+                return
+            if episodes < 1:
+                self.status.set("训练局数至少为 1，或留空表示无限训练。")
+                return
+        else:
+            episodes = None
 
         seed_text = self.seed.get().strip()
         if seed_text:
@@ -242,12 +255,16 @@ class TrainingPanel:
             self.status.set(str(exc))
             return
         output = str(output_path)
+        reference_type = self._selected_reference_type()
+        if reference_type != REFERENCE_TYPE_INITIAL_WEIGHTS:
+            self.status.set("当前仅支持使用参考模型作为起始权重。")
+            return
         reference_model_path = self._selected_reference_path()
         resume_artifact = self._selected_resume_artifact()
         resume_run_path = self._selected_resume_run_path()
         if resume_artifact is not None:
             completed = int(resume_artifact.get("completed_episodes") or 0)
-            if episodes < completed:
+            if episodes is not None and episodes < completed:
                 self.status.set(f"继续训练总局数不能低于当前已训练局数 {completed}。")
                 return
         enemy_type = ENEMY_TYPES_BY_LABEL[self.enemy_type.get()]
@@ -255,9 +272,16 @@ class TrainingPanel:
 
         self.running = True
         self.stop_event = threading.Event()
+        self.unlimited_training = episodes is None
         self.progress.set(0)
+        if self.unlimited_training:
+            self.progress_bar.configure(mode="indeterminate")
+            self.progress_bar.start(12)
+        else:
+            self.progress_bar.stop()
+            self.progress_bar.configure(mode="determinate")
         self._refresh_button()
-        self.status.set(f"正在训练 {episodes} 局...")
+        self.status.set("正在无限训练，手动停止后会保存为已完成结果。" if episodes is None else f"正在训练 {episodes} 局...")
         self.latest_preview = None
 
         # 训练可能很慢，放入 daemon 线程；界面通过队列接收进度和最终摘要。
@@ -289,7 +313,10 @@ class TrainingPanel:
             return
         self.stop_event.set()
         self.button.configure(text="停止中...", state=tk.DISABLED)
-        self.status.set("已请求停止训练，当前局结束后会保存未完成进度。")
+        if self.unlimited_training:
+            self.status.set("已请求停止训练，当前局结束后会保存为已完成训练结果。")
+        else:
+            self.status.set("已请求停止训练，当前局结束后会保存未完成进度。")
 
     def _worker(
         self,
@@ -297,7 +324,7 @@ class TrainingPanel:
         algorithm: str,
         enemy_type: str,
         player_type: str,
-        episodes: int,
+        episodes: int | None,
         seed: int | None,
         output: str | None,
         reference_model_path: Path | None,
@@ -439,14 +466,22 @@ class TrainingPanel:
             if event == "progress":
                 target, current, total, max_tile, score, epsilon, device, board, steps = payload
                 self.latest_preview = (board, score, steps, max_tile)
-                self.progress.set(int(current * 100 / total))
-                self.status.set(
-                    f"{target} {current}/{total} | 玩家最大块 {max_tile} | 玩家分数 {score} | 探索率 {epsilon:.2f} | 设备 {device}"
-                )
+                if total is None:
+                    self.status.set(
+                        f"{target} 第 {current} 局 | 无限训练 | 玩家最大块 {max_tile} | 玩家分数 {score} | 探索率 {epsilon:.2f} | 设备 {device}"
+                    )
+                else:
+                    self.progress.set(int(current * 100 / total))
+                    self.status.set(
+                        f"{target} {current}/{total} | 玩家最大块 {max_tile} | 玩家分数 {score} | 探索率 {epsilon:.2f} | 设备 {device}"
+                    )
             elif event == "done":
                 target, summary = payload
                 self.running = False
                 self.stop_event = None
+                self.unlimited_training = False
+                self.progress_bar.stop()
+                self.progress_bar.configure(mode="determinate")
                 self._refresh_button()
                 self.progress.set(100 if summary.status != TRAINING_STATUS_INCOMPLETE else self.progress.get())
                 self._render_latest_preview()
@@ -474,6 +509,9 @@ class TrainingPanel:
             elif event == "error":
                 self.running = False
                 self.stop_event = None
+                self.unlimited_training = False
+                self.progress_bar.stop()
+                self.progress_bar.configure(mode="determinate")
                 self._refresh_button()
                 self.status.set(f"训练失败：{payload}")
 
@@ -560,6 +598,9 @@ class TrainingPanel:
 
     def _selected_reference_path(self) -> Path | None:
         return self.reference_options.get(self.reference_model.get())
+
+    def _selected_reference_type(self) -> str:
+        return REFERENCE_TYPES_BY_LABEL.get(self.reference_type.get(), "")
 
     def _selected_resume_artifact(self) -> dict[str, Any] | None:
         return self.resume_options.get(self.resume_run.get())
