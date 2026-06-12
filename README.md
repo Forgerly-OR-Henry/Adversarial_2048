@@ -46,6 +46,15 @@ GUI 包含四个工作区：
 
 主窗口还提供结果管理和系统日志清理。`latest/` 模型是当前默认加载入口，只能在结果管理中手动设定；删除或替换前需要明确确认。
 
+## 代码结构
+
+训练界面按 `ui -> workflows -> domain` 分层：
+
+- `ui.panels.training`：Tkinter 控件、按钮状态、进度条、预览刷新和队列事件处理。
+- `ui.panels.training_options`：参考模型和继续训练下拉框的中文标签映射。
+- `workflows.training`：训练表单校验、`TrainingRunRequest`、进度事件归一化和 Q-learning / DQN 训练分发。
+- `domain.train`：实际 Q-learning、DQN、产物保存、合并和调参逻辑。
+
 ## 策略类型
 
 玩家类型：
