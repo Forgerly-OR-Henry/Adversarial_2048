@@ -419,8 +419,8 @@ def list_training_artifacts(root: str | Path | None = None, *, include_incomplet
             if not include_incomplete and is_incomplete_training_info(info):
                 continue
             info["status"] = training_info_status(info)
-            info.setdefault("info_path", project_relative_path(run_directory / TRAINING_INFO_FILENAME))
-            info.setdefault("run_directory", project_relative_path(run_directory))
+            info["info_path"] = project_relative_path(run_directory / TRAINING_INFO_FILENAME)
+            info["run_directory"] = project_relative_path(run_directory)
             artifacts.append(info)
     return artifacts
 

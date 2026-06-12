@@ -134,7 +134,7 @@ CPU-only 环境使用：
 python -m pip install -r requirements-cpu.txt
 ```
 
-程序会自动选择 `cuda` 或 `cpu`。如果 DQN 相关命令提示缺少 PyTorch，优先使用项目虚拟环境重新验证：
+所有依赖文件都包含 `PyYAML`，配置加载需要该库。程序会自动选择 `cuda` 或 `cpu`。如果 DQN 相关命令提示缺少 PyTorch，优先使用项目虚拟环境重新验证：
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests

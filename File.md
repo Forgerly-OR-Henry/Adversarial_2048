@@ -29,9 +29,9 @@ python -m unittest discover -s tests
 adversarial_2048/
 │
 ├── README.md                         # [已实现] 项目说明、运行方式、模式说明
-├── requirements.txt                  # [已实现] 默认 GPU 训练依赖，PyTorch CUDA 12.8 + numpy
-├── requirements-gpu-cu128.txt        # [已实现] GPU 版 PyTorch CUDA 12.8 依赖
-├── requirements-cpu.txt              # [已实现] CPU-only 备选依赖
+├── requirements.txt                  # [已实现] 默认 GPU 训练依赖，PyTorch CUDA 12.8 + numpy + PyYAML
+├── requirements-gpu-cu128.txt        # [已实现] GPU 版 PyTorch CUDA 12.8 + PyYAML 依赖
+├── requirements-cpu.txt              # [已实现] CPU-only + PyYAML 备选依赖
 ├── .gitignore                        # [已实现] 忽略缓存、日志、输出、模型等运行产物
 ├── File.md                           # [已实现] 当前文件结构与实现状态说明
 │
@@ -45,7 +45,7 @@ adversarial_2048/
 │   │   └── commands.py               # [已实现] CLI 命令执行、终端游玩、训练/评估分发
 │   │
 │   ├── config/                       # [已实现] 配置加载包
-│   │   └── __init__.py               # [已实现] YAML/简易 YAML 配置加载器，提供路径、训练、评估、UI 默认值
+│   │   └── __init__.py               # [已实现] PyYAML 配置加载器，提供路径、训练、评估、UI 默认值
 │   │
 │   ├── domain/                       # [已实现] 2048 领域层：规则、策略、模型、训练、评估和结果管理
 │   │   ├── __init__.py               # [已实现] domain 包标记
@@ -87,8 +87,9 @@ adversarial_2048/
 │   │   ├── train/                    # [已实现/待扩展] 训练脚本目录
 │   │   │   ├── __init__.py           # [已实现] 导出 Q/DQN 训练入口，DQN 按需懒加载
 │   │   │   ├── artifacts.py          # [已实现] 训练产物命名、索引、元数据保存与查询
-│   │   │   ├── merge.py              # [已实现] 兼容训练产物合并与发布 latest
+│   │   │   ├── merge.py              # [已实现] 同类型训练产物合并与发布 latest
 │   │   │   ├── tuning.py             # [已实现] 自动短轮调参与候选结果排序
+│   │   │   ├── looping.py            # [已实现] 训练局数、epsilon 调度和外层 episode 循环
 │   │   │   ├── q_learning/           # [已实现] Q-learning 训练子包
 │   │   │   │   ├── __init__.py       # [已实现] 导出 Q-learning 训练入口和奖励函数
 │   │   │   │   ├── player.py         # [已实现] Q-learning 玩家训练循环
@@ -96,7 +97,7 @@ adversarial_2048/
 │   │   │   └── dqn/                  # [已实现] DQN 训练子包
 │   │   │       ├── __init__.py       # [已实现] 导出 DQN 训练入口，按需懒加载 Torch
 │   │   │       ├── checkpoints.py    # [已实现] DQN checkpoint 和 state_dict 共享工具
-│   │   │       ├── common.py         # [已实现] DQN 合法动作 mask 等共享训练计算
+│   │   │       ├── common.py         # [已实现] DQN batch 优化、稳定性和 checkpoint 共享计算
 │   │   │       ├── replay_buffer.py  # [已实现] DQN 经验回放池
 │   │   │       ├── stability.py      # [已实现] DQN 稳定性控制、回滚、学习率调整配置
 │   │   │       ├── player.py         # [已实现] PyTorch DQN 玩家训练循环
@@ -141,7 +142,8 @@ adversarial_2048/
 │   │   │   └── theme.py              # [已实现] GUI 主题、颜色、字体、按钮样式、高 DPI 设置
 │   │   └── windows/                  # [已实现] 独立弹窗
 │   │       ├── __init__.py           # [已实现] 导出窗口构造器
-│   │       └── result_manager.py     # [已实现] 训练模型和评估结果管理窗口
+│   │       ├── result_manager.py     # [已实现] 训练模型和评估结果管理窗口编排
+│   │       └── result_manager_table.py # [已实现] 结果管理表格、勾选图片和展示格式化
 │   │
 │   └── utils/                        # [已实现] 通用工具
 │       ├── __init__.py               # [已实现] 导出 recorder / seed / training_log
@@ -294,6 +296,7 @@ episode,max_tile,score,steps,player_type,enemy_type,seed
 ### 结果管理服务
 
 - `[已实现]` `results/management.py` 统一扫描训练成果、latest 模型和评估 CSV，输出 GUI 可展示的 `ManagedResult`。
+- `[已实现]` 训练成果管理依赖 `info.json` 和扫描到的信息文件路径，不再用模型路径或展示路径推断训练目录。
 - `[已实现]` 删除训练或评估产物前会校验路径必须位于项目和受管目录内，避免误删源码或项目外文件。
 - `[已实现]` 删除产物后会同步清理训练、评估和错误 JSONL 中引用该产物的日志行。
 - `[已实现]` 支持将历史完整训练成果发布为对应类型的 `latest/` 默认模型，未完成训练不能发布。
@@ -331,7 +334,8 @@ episode,max_tile,score,steps,player_type,enemy_type,seed
 - `[已实现]` `models/dqn/network.py`：PyTorch MLP DQN 网络。
 - `[已实现]` `models/dqn/policy.py`：DQN 策略加载和合法动作选择工具。
 - `[已实现]` `train/dqn/checkpoints.py`：DQN checkpoint 保存、加载和 state_dict 共享工具。
-- `[已实现]` `train/dqn/common.py`：DQN 训练共享计算。
+- `[已实现]` `train/looping.py`：训练局数、epsilon 调度和 Q/DQN 共用外层 episode 循环。
+- `[已实现]` `train/dqn/common.py`：DQN batch 优化、target 同步、稳定性决策和 checkpoint 共享计算。
 - `[已实现]` `train/dqn/replay_buffer.py`：DQN 经验回放池。
 - `[已实现]` `train/dqn/player.py`：深度 DQN 玩家训练循环。
 - `[已实现]` `train/dqn/stability.py`：DQN 稳定性控制，支持 best checkpoint、滚动 checkpoint、回滚与学习率调整。
@@ -379,7 +383,7 @@ episode,max_tile,score,steps,player_type,enemy_type,seed
 - `[已实现]` `configs/train/enemy_q.yaml`：Q-learning 敌人训练默认参数。
 - `[已实现]` `configs/train/player_dqn.yaml`：DQN 玩家训练默认参数。
 - `[已实现]` `configs/train/enemy_dqn.yaml`：DQN 敌人训练默认参数。
-- `[已实现]` `src/config/__init__.py`：配置加载器；可使用 PyYAML，未安装时使用内置简易 YAML 解析。
+- `[已实现]` `src/config/__init__.py`：配置加载器；强制使用 PyYAML。
 - `[未实现]` `configs/self_play.yaml`。
 
 ---

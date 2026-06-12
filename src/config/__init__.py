@@ -7,6 +7,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_ROOT = PROJECT_ROOT / "configs"
 
@@ -18,94 +20,12 @@ MODEL_FILENAMES = {
 }
 
 
-def _parse_scalar(value: str) -> Any:
-    normalized = value.strip()
-    if normalized in ("", "null", "Null", "NULL", "~"):
-        return None
-    if normalized in ('""', "''"):
-        return ""
-    if (
-        len(normalized) >= 2
-        and normalized[0] == normalized[-1]
-        and normalized[0] in ("'", '"')
-    ):
-        return normalized[1:-1]
-    if normalized.lower() == "true":
-        return True
-    if normalized.lower() == "false":
-        return False
-    try:
-        return int(normalized)
-    except ValueError:
-        pass
-    try:
-        return float(normalized)
-    except ValueError:
-        return normalized
-
-
-def _next_content_indent(lines: list[str], start_index: int) -> int | None:
-    for raw_line in lines[start_index + 1 :]:
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        return len(raw_line) - len(raw_line.lstrip(" "))
-    return None
-
-
-def _load_simple_yaml(text: str) -> dict[str, Any]:
-    lines = text.splitlines()
-    root: dict[str, Any] = {}
-    stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
-
-    for index, raw_line in enumerate(lines):
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if ":" not in stripped:
-            raise ValueError(f"Unsupported YAML line: {raw_line}")
-
-        indent = len(raw_line) - len(raw_line.lstrip(" "))
-        key, value = stripped.split(":", 1)
-        key = key.strip()
-        value = value.strip()
-
-        # 这个 fallback 只支持当前配置需要的“缩进字典 + 标量”，不是完整 YAML 实现。
-        # This fallback supports only the current configs' indented mappings and scalars, not full YAML.
-        while indent <= stack[-1][0]:
-            stack.pop()
-        parent = stack[-1][1]
-
-        if value:
-            parent[key] = _parse_scalar(value)
-            continue
-
-        next_indent = _next_content_indent(lines, index)
-        if next_indent is not None and next_indent > indent:
-            child: dict[str, Any] = {}
-            parent[key] = child
-            stack.append((indent, child))
-        else:
-            parent[key] = None
-
-    return root
-
-
 @lru_cache(maxsize=None)
 def _load_config_cached(relative_path: str) -> dict[str, Any]:
     config_path = CONFIG_ROOT / relative_path
     with config_path.open("r", encoding="utf-8") as handle:
-        text = handle.read()
-
-    try:
-        import yaml
-    except ModuleNotFoundError:
-        # 薄环境没有 PyYAML 时仍可跑测试；生产环境优先使用 yaml.safe_load。
-        # Tests can still run without PyYAML; production paths prefer yaml.safe_load.
-        data = _load_simple_yaml(text)
-    else:
-        loaded = yaml.safe_load(text)
-        data = loaded if loaded is not None else {}
+        loaded = yaml.safe_load(handle)
+    data = loaded if loaded is not None else {}
 
     if not isinstance(data, dict):
         raise ValueError(f"Config must be a mapping: {config_path}")

@@ -57,6 +57,19 @@ class ResultManagementTest(unittest.TestCase):
         self.assertIn(eval_dir, paths)
         self.assertTrue(any(item.is_latest and item.path == self.latest_root for item in results))
 
+    def test_listed_training_run_uses_discovered_info_path(self):
+        run_dir = self._create_training_run("20260610_120009")
+        info_path = run_dir / "info.json"
+        payload = json.loads(info_path.read_text(encoding="utf-8"))
+        payload["info_path"] = (self.root / "outside" / "info.json").as_posix()
+        payload["run_directory"] = (self.root / "outside").as_posix()
+        info_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        result = self._result_for(run_dir)
+
+        self.assertEqual(result.path, run_dir)
+        self.assertEqual(result.display_path.resolve(), (run_dir / "player_q_model.json").resolve())
+
     def test_deletes_training_run_and_related_logs(self):
         run_dir = self._create_training_run("20260610_120001")
         other_dir = self._create_training_run("20260610_120002")
@@ -261,6 +274,27 @@ class ResultManagementTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             promote_training_result_to_latest(
                 run_dir,
+                training_roots=self.training_roots,
+                latest_roots=self.latest_roots,
+            )
+
+    def test_promote_requires_training_info_file(self):
+        run_dir = self.runs_root / "manual"
+        model_path = run_dir / "player_q_model.json"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        model_path.write_text("{}", encoding="utf-8")
+        result = ManagedResult(
+            result_type="training",
+            path=run_dir,
+            display_path=model_path,
+            created_at="2026-06-10T12:00:00",
+            size_bytes=2,
+            training_type="player_q",
+        )
+
+        with self.assertRaises(ValueError):
+            promote_training_result_to_latest(
+                result,
                 training_roots=self.training_roots,
                 latest_roots=self.latest_roots,
             )

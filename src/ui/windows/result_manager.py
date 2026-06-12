@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import tkinter as tk
-from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Any
 
@@ -16,7 +15,14 @@ from domain.results import (
 )
 from domain.train.artifacts import TRAINING_STATUS_INCOMPLETE
 from ui.components import create_action_button
-from ui.settings.theme import BORDER, FONT_FAMILY, MUTED, PANEL_BG, TEXT
+from ui.settings.theme import MUTED, PANEL_BG
+from ui.windows.result_manager_table import (
+    ResultTable,
+    apply_result_tree_style,
+    create_checkbox_images,
+    display_path,
+    result_key,
+)
 
 
 class ResultManagerWindow:
@@ -36,11 +42,10 @@ class ResultManagerWindow:
         self.status = tk.StringVar(value="请选择要清理的训练模型或评估结果。")
         self.training_results: list[ManagedResult] = []
         self.evaluation_results: list[ManagedResult] = []
-        self.item_results: dict[str, ManagedResult] = {}
         self.selected_paths: set[str] = set()
-        self.checkbox_images = self._create_checkbox_images()
+        self.checkbox_images = create_checkbox_images()
 
-        self._apply_styles()
+        apply_result_tree_style(self.window)
         self._build()
         self.refresh()
 
@@ -88,90 +93,37 @@ class ResultManagerWindow:
         self.notebook.grid(row=1, column=0, sticky="nsew", padx=20, pady=(8, 20))
         self.notebook.bind("<<NotebookTabChanged>>", lambda _event: self._refresh_status())
 
-        self.training_tree = self._create_tree("训练模型")
-        self.evaluation_tree = self._create_tree("评估结果")
-
-    def _create_tree(self, title: str) -> ttk.Treeview:
-        frame = ttk.Frame(self.notebook, style="Panel.TFrame", padding=14)
-        frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(0, weight=1)
-        self.notebook.add(frame, text=title)
-
-        columns = ("kind", "created", "size", "latest", "path")
-        tree = ttk.Treeview(
-            frame,
-            columns=columns,
-            show="tree headings",
-            selectmode="browse",
-            height=15,
-            style="Result.Treeview",
+        self.training_table = ResultTable(
+            self.notebook,
+            title="训练模型",
+            checkbox_images=self.checkbox_images,
+            on_toggle=self._toggle_result,
         )
-        tree.heading("#0", text="选择")
-        tree.heading("kind", text="类型")
-        tree.heading("created", text="时间")
-        tree.heading("size", text="大小")
-        tree.heading("latest", text="状态")
-        tree.heading("path", text="路径")
-        tree.column("#0", width=78, minwidth=78, anchor="center", stretch=False)
-        tree.column("kind", width=150, minwidth=140, anchor="w", stretch=False)
-        tree.column("created", width=205, minwidth=190, anchor="w", stretch=False)
-        tree.column("size", width=100, minwidth=90, anchor="e", stretch=False)
-        tree.column("latest", width=95, minwidth=88, anchor="center", stretch=False)
-        tree.column("path", width=860, minwidth=620, anchor="w", stretch=True)
-        tree.grid(row=0, column=0, sticky="nsew")
-
-        y_scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
-        y_scrollbar.grid(row=0, column=1, sticky="ns")
-        tree.configure(yscrollcommand=y_scrollbar.set)
-        tree.bind("<ButtonRelease-1>", lambda event, selected_tree=tree: self._toggle_from_event(selected_tree, event))
-        tree.bind("<space>", lambda event, selected_tree=tree: self._toggle_keyboard(selected_tree))
-        tree.tag_configure("latest", foreground="#8a4f12")
-        tree.tag_configure("incomplete", foreground="#9b2f2f")
-        tree.tag_configure("normal", foreground=TEXT)
-        return tree
-
-    def _apply_styles(self) -> None:
-        style = ttk.Style(self.window)
-        style.configure(
-            "Result.Treeview",
-            background="#ffffff",
-            fieldbackground="#ffffff",
-            foreground=TEXT,
-            bordercolor=BORDER,
-            rowheight=38,
-            font=(FONT_FAMILY, 12),
-        )
-        style.configure(
-            "Result.Treeview.Heading",
-            background="#f0ece4",
-            foreground=TEXT,
-            font=(FONT_FAMILY, 13, "bold"),
-            padding=(8, 8),
-        )
-        style.map(
-            "Result.Treeview",
-            background=[("selected", "#efe4d1")],
-            foreground=[("selected", TEXT)],
+        self.evaluation_table = ResultTable(
+            self.notebook,
+            title="评估结果",
+            checkbox_images=self.checkbox_images,
+            on_toggle=self._toggle_result,
         )
 
     def refresh(self) -> None:
         results = list_managed_results()
         self.training_results = [item for item in results if item.result_type == "training"]
         self.evaluation_results = [item for item in results if item.result_type == "evaluation"]
-        existing_paths = {self._key(item.path) for item in results}
+        existing_paths = {result_key(item.path) for item in results}
         self.selected_paths.intersection_update(existing_paths)
-        self._render_tree(self.training_tree, self.training_results)
-        self._render_tree(self.evaluation_tree, self.evaluation_results)
+        self.training_table.render(self.training_results, self.selected_paths)
+        self.evaluation_table.render(self.evaluation_results, self.selected_paths)
         self._refresh_status()
 
     def select_visible(self) -> None:
         for item in self._visible_results():
-            self.selected_paths.add(self._key(item.path))
+            self.selected_paths.add(result_key(item.path))
         self._render_all()
 
     def clear_visible(self) -> None:
         for item in self._visible_results():
-            self.selected_paths.discard(self._key(item.path))
+            self.selected_paths.discard(result_key(item.path))
         self._render_all()
 
     def promote_selected_to_latest(self) -> None:
@@ -192,7 +144,7 @@ class ResultManagerWindow:
         if not messagebox.askyesno(
             "设为 latest",
             (
-                f"将 {self._display_path(result.display_path)} 设为 {result.training_type} 的 latest，"
+                f"将 {display_path(result.display_path)} 设为 {result.training_type} 的 latest，"
                 "并移除旧 latest。是否继续？"
             ),
             parent=self.window,
@@ -205,14 +157,14 @@ class ResultManagerWindow:
             self.status.set(f"设为 latest 失败：{exc}")
             return
 
-        self.selected_paths.discard(self._key(result.path))
+        self.selected_paths.discard(result_key(result.path))
         self.app.game_panel.reload_ai_player()
         if hasattr(self.app, "training_platform_panel"):
             self.app.training_platform_panel._reload_selects()
         self.refresh()
         self.status.set(
-            f"已将 {self._display_path(summary.source_model_path)} 设为 {summary.training_type} latest："
-            f"{self._display_path(summary.latest_model_path)}"
+            f"已将 {display_path(summary.source_model_path)} 设为 {summary.training_type} latest："
+            f"{display_path(summary.latest_model_path)}"
         )
 
     def compact_selected_logs(self) -> None:
@@ -249,7 +201,7 @@ class ResultManagerWindow:
         if latest_items:
             # latest 模型是各 AI 默认加载入口，删除前需要单独确认。
             # latest models are default AI loading entrypoints, so deletion needs separate confirmation.
-            names = "\n".join(self._display_path(item.path) for item in latest_items[:6])
+            names = "\n".join(display_path(item.path) for item in latest_items[:6])
             if len(latest_items) > 6:
                 names += f"\n...以及 {len(latest_items) - 6} 项"
             allow_latest = messagebox.askyesno(
@@ -268,7 +220,7 @@ class ResultManagerWindow:
             return
 
         for item in selected:
-            self.selected_paths.discard(self._key(item.path))
+            self.selected_paths.discard(result_key(item.path))
         if any(item.result_type == "training" for item in selected):
             self.app.game_panel.reload_ai_player()
             if hasattr(self.app, "training_platform_panel"):
@@ -281,57 +233,12 @@ class ResultManagerWindow:
         )
 
     def _render_all(self) -> None:
-        self._render_tree(self.training_tree, self.training_results)
-        self._render_tree(self.evaluation_tree, self.evaluation_results)
+        self.training_table.render(self.training_results, self.selected_paths)
+        self.evaluation_table.render(self.evaluation_results, self.selected_paths)
         self._refresh_status()
 
-    def _render_tree(self, tree: ttk.Treeview, results: list[ManagedResult]) -> None:
-        for item_id in tree.get_children():
-            tree.delete(item_id)
-        for index, result in enumerate(results):
-            item_id = f"{result.result_type}-{index}"
-            self.item_results[item_id] = result
-            selected = self._key(result.path) in self.selected_paths
-            kind = self._kind_label(result)
-            status = self._status_label(result)
-            if result.is_latest:
-                tags = ("latest",)
-            elif result.status == TRAINING_STATUS_INCOMPLETE:
-                tags = ("incomplete",)
-            else:
-                tags = ("normal",)
-            tree.insert(
-                "",
-                "end",
-                iid=item_id,
-                image=self.checkbox_images["checked" if selected else "unchecked"],
-                values=(
-                    kind,
-                    result.created_at,
-                    self._format_size(result.size_bytes),
-                    status,
-                    self._display_path(result.display_path),
-                ),
-                tags=tags,
-            )
-
-    def _toggle_from_event(self, tree: ttk.Treeview, event: tk.Event) -> None:
-        item_id = tree.identify_row(event.y)
-        if item_id:
-            self._toggle_item(item_id)
-
-    def _toggle_keyboard(self, tree: ttk.Treeview) -> str:
-        for item_id in tree.focus(), *tree.selection():
-            if item_id:
-                self._toggle_item(item_id)
-                break
-        return "break"
-
-    def _toggle_item(self, item_id: str) -> None:
-        result = self.item_results.get(item_id)
-        if result is None:
-            return
-        key = self._key(result.path)
+    def _toggle_result(self, result: ManagedResult) -> None:
+        key = result_key(result.path)
         if key in self.selected_paths:
             self.selected_paths.remove(key)
         else:
@@ -340,13 +247,13 @@ class ResultManagerWindow:
 
     def _visible_results(self) -> list[ManagedResult]:
         current = self.notebook.index(self.notebook.select())
-        return self.training_results if current == 0 else self.evaluation_results
+        return self.training_table.results if current == 0 else self.evaluation_table.results
 
     def _selected_results(self) -> list[ManagedResult]:
         return [
             item
-            for item in self.training_results + self.evaluation_results
-            if self._key(item.path) in self.selected_paths
+            for item in self.training_table.results + self.evaluation_table.results
+            if result_key(item.path) in self.selected_paths
         ]
 
     def _refresh_status(self) -> None:
@@ -354,68 +261,6 @@ class ResultManagerWindow:
         self.status.set(
             f"训练模型 {len(self.training_results)} 项，评估结果 {len(self.evaluation_results)} 项，已选择 {selected} 项。"
         )
-
-    def _kind_label(self, result: ManagedResult) -> str:
-        if result.result_type == "evaluation":
-            return "评估 CSV"
-        return result.training_type or "训练模型"
-
-    def _status_label(self, result: ManagedResult) -> str:
-        if result.is_latest:
-            return "latest"
-        if result.status == TRAINING_STATUS_INCOMPLETE:
-            return "未完成"
-        return ""
-
-    def _display_path(self, path: Path) -> str:
-        try:
-            return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
-        except (OSError, ValueError):
-            return path.as_posix()
-
-    @staticmethod
-    def _format_size(size: int) -> str:
-        if size < 1024:
-            return f"{size} B"
-        if size < 1024 * 1024:
-            return f"{size / 1024:.1f} KB"
-        return f"{size / (1024 * 1024):.1f} MB"
-
-    def _create_checkbox_images(self) -> dict[str, tk.PhotoImage]:
-        return {
-            "unchecked": self._create_checkbox_image(checked=False),
-            "checked": self._create_checkbox_image(checked=True),
-        }
-
-    def _create_checkbox_image(self, *, checked: bool) -> tk.PhotoImage:
-        size = 24
-        image = tk.PhotoImage(width=size, height=size)
-        image.put("#ffffff", to=(0, 0, size, size))
-        image.put("#ffffff", to=(3, 3, size - 3, size - 3))
-        image.put(MUTED, to=(3, 3, size - 3, 5))
-        image.put(MUTED, to=(3, size - 5, size - 3, size - 3))
-        image.put(MUTED, to=(3, 3, 5, size - 3))
-        image.put(MUTED, to=(size - 5, 3, size - 3, size - 3))
-        if checked:
-            self._draw_check_mark(image)
-        return image
-
-    def _draw_check_mark(self, image: tk.PhotoImage) -> None:
-        for index in range(5):
-            self._draw_square(image, 7 + index, 12 + index, "#2f8f5b")
-        for index in range(9):
-            self._draw_square(image, 11 + index, 16 - index, "#2f8f5b")
-
-    @staticmethod
-    def _draw_square(image: tk.PhotoImage, x: int, y: int, color: str) -> None:
-        image.put(color, to=(x - 1, y - 1, x + 2, y + 2))
-
-    @staticmethod
-    def _key(path: Path) -> str:
-        try:
-            return str(path.resolve())
-        except OSError:
-            return str(path)
 
 
 def open_result_manager_window(app: Any) -> ResultManagerWindow:

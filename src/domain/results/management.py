@@ -26,6 +26,7 @@ from domain.train.artifacts import (
     load_training_info,
     model_path_from_info,
     replace_latest_model,
+    resolve_info_path,
     training_info_status,
 )
 
@@ -94,7 +95,10 @@ def list_managed_results(
         if not root.exists():
             continue
         for info in list_training_artifacts(root):
-            run_directory = _run_directory_from_info(info, root)
+            try:
+                run_directory = _run_directory_from_info(info, root)
+            except ValueError:
+                continue
             if run_directory.name == "latest":
                 continue
             model_path = model_path_from_info(info) if isinstance(info, dict) else None
@@ -316,6 +320,8 @@ def promote_training_result_to_latest(
     if item.status == TRAINING_STATUS_INCOMPLETE:
         raise ValueError("未完成训练不能设为 latest。")
     info = _info_for_result(item)
+    if not isinstance(info, dict):
+        raise ValueError("Selected training result must include info.json.")
     if training_info_status(info) == TRAINING_STATUS_INCOMPLETE:
         raise ValueError("未完成训练不能设为 latest。")
 
@@ -382,17 +388,12 @@ def _training_type_for_result(item: ManagedResult) -> str:
 
 
 def _source_model_path_for_result(item: ManagedResult) -> Path:
-    candidates: list[Path] = []
     info = _info_for_result(item)
-    if isinstance(info, dict):
-        info_model_path = model_path_from_info(info)
-        if info_model_path is not None:
-            candidates.append(info_model_path)
-    candidates.append(item.display_path)
-
-    for candidate in candidates:
-        if candidate.exists() and candidate.is_file():
-            return candidate
+    if not isinstance(info, dict):
+        raise ValueError("Selected training result must include info.json.")
+    info_model_path = model_path_from_info(info)
+    if info_model_path is not None and info_model_path.exists() and info_model_path.is_file():
+        return info_model_path
     raise FileNotFoundError(f"Cannot find a model file for selected result: {item.path}")
 
 
@@ -479,23 +480,23 @@ def _created_at(info: dict[str, Any] | None, fallback: Path) -> str:
     return _mtime_text(fallback)
 
 
-def _run_directory_from_info(info: dict[str, Any], fallback_root: Path) -> Path:
-    run_directory = _path_from_info_value(info.get("run_directory"))
-    if run_directory is not None:
-        return run_directory
-    info_path = _path_from_info_value(info.get("info_path"))
-    if info_path is not None:
-        return info_path.parent
-    model_path = _path_from_info_value(info.get("model_path"))
-    if model_path is not None:
-        return model_path.parent
-    return fallback_root
-
-
-def _path_from_info_value(value: Any) -> Path | None:
-    if value in (None, ""):
-        return None
-    return Path(str(value))
+def _run_directory_from_info(info: dict[str, Any], root: Path) -> Path:
+    resolved_info_path = resolve_info_path(info.get("info_path"))
+    if resolved_info_path is None:
+        raise ValueError("Training artifact info must include info_path.")
+    raw_run_directory = info.get("run_directory")
+    run_directory = (
+        Path(str(raw_run_directory))
+        if raw_run_directory not in (None, "")
+        else Path(str(info["info_path"])).parent
+    )
+    resolved_run = _resolve_existing_or_parent(run_directory)
+    if resolved_run != _resolve_existing_or_parent(resolved_info_path.parent):
+        raise ValueError(f"Training artifact run_directory does not match info_path: {resolved_info_path}")
+    resolved_root = _resolve_existing_or_parent(root)
+    if not _is_relative_to(resolved_run, resolved_root):
+        raise ValueError(f"Training artifact info is outside the configured root: {resolved_info_path}")
+    return run_directory
 
 
 def _mtime_text(path: Path) -> str:
