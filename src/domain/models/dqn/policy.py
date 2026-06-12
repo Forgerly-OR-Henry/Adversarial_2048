@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from domain.models.dqn_network import DQNNetwork, board_to_tensor
+from domain.models.dqn.network import DQNNetwork, board_to_tensor
 from domain.models.torch_utils import load_torch_checkpoint
 
 

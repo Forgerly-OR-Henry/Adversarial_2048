@@ -8,7 +8,7 @@ from pathlib import Path
 from config import get_model_path
 from domain.game.constants import ACTIONS
 from domain.game.state import GameState
-from domain.models.dqn_policy import best_legal_dqn_action, load_dqn_policy_model
+from domain.models.dqn.policy import best_legal_dqn_action, load_dqn_policy_model
 from domain.models.torch_utils import get_torch_device, require_torch
 from domain.players.base_player import BasePlayer
 

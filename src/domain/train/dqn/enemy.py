@@ -13,7 +13,7 @@ from domain.game.env import GameEnv
 from domain.game.rules import is_game_over, move
 from domain.game.state import GameState
 from domain.models import ENEMY_ACTIONS, action_to_spawn, get_legal_spawn_actions
-from domain.models.dqn_network import DQNNetwork, batch_boards_to_tensor
+from domain.models.dqn.network import DQNNetwork, batch_boards_to_tensor
 from domain.models.torch_utils import get_torch_device, require_torch
 from domain.players import create_player
 from domain.train.artifacts import (

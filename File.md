@@ -79,9 +79,11 @@ adversarial_2048/
 │   │   │   │   ├── linear.py         # [已实现] 线性 Q 模型共享保存、加载和更新逻辑
 │   │   │   │   ├── player.py         # [已实现] 纯标准库玩家线性 Q 模型
 │   │   │   │   └── enemy.py          # [已实现] 纯标准库敌人线性 Q 模型，32 个出块动作
-│   │   │   ├── torch_utils.py        # [已实现] PyTorch 检测、CUDA/CPU 设备选择
-│   │   │   ├── dqn_policy.py         # [已实现] DQN 策略模型加载和合法动作选择工具
-│   │   │   └── dqn_network.py        # [已实现] PyTorch MLP DQN 网络
+│   │   │   ├── dqn/                  # [已实现] PyTorch DQN 模型包
+│   │   │   │   ├── __init__.py       # [已实现] 导出 DQN 网络和策略运行工具
+│   │   │   │   ├── network.py        # [已实现] PyTorch MLP DQN 网络
+│   │   │   │   └── policy.py         # [已实现] DQN 策略模型加载和合法动作选择工具
+│   │   │   └── torch_utils.py        # [已实现] PyTorch 检测、CUDA/CPU 设备选择
 │   │   ├── train/                    # [已实现/待扩展] 训练脚本目录
 │   │   │   ├── __init__.py           # [已实现] 导出 Q/DQN 训练入口，DQN 按需懒加载
 │   │   │   ├── artifacts.py          # [已实现] 训练产物命名、索引、元数据保存与查询
@@ -326,8 +328,8 @@ episode,max_tile,score,steps,player_type,enemy_type,seed
 - `[已实现]` `models/q_learning/player_features.py`：棋盘特征编码。
 - `[已实现]` `train/q_learning/player.py`：Q-learning 玩家训练循环。
 - `[已实现]` `players/dqn_player.py`：基于 PyTorch 的深度 DQN 玩家。
-- `[已实现]` `models/dqn_network.py`：PyTorch MLP DQN 网络。
-- `[已实现]` `models/dqn_policy.py`：DQN 策略加载和合法动作选择工具。
+- `[已实现]` `models/dqn/network.py`：PyTorch MLP DQN 网络。
+- `[已实现]` `models/dqn/policy.py`：DQN 策略加载和合法动作选择工具。
 - `[已实现]` `train/dqn/checkpoints.py`：DQN checkpoint 保存、加载和 state_dict 共享工具。
 - `[已实现]` `train/dqn/common.py`：DQN 训练共享计算。
 - `[已实现]` `train/dqn/replay_buffer.py`：DQN 经验回放池。

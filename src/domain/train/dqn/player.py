@@ -11,7 +11,7 @@ from config import get_train_defaults
 from domain.enemies import create_enemy
 from domain.game.constants import ACTIONS
 from domain.game.env import GameEnv
-from domain.models.dqn_network import DQNNetwork, batch_boards_to_tensor
+from domain.models.dqn.network import DQNNetwork, batch_boards_to_tensor
 from domain.models.torch_utils import get_torch_device, require_torch
 from domain.train.artifacts import (
     TRAINING_STATUS_COMPLETED,
