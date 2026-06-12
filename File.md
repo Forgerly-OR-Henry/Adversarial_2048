@@ -341,6 +341,8 @@ episode,max_tile,score,steps,player_type,enemy_type,seed
 - `[已实现]` `train/dqn/stability.py`：DQN 稳定性控制，支持 best checkpoint、滚动 checkpoint、回滚与学习率调整。
 - `[已实现]` 自动选择 `cuda` / `cpu` 训练设备。
 - `[已实现]` 默认依赖切换为 GPU 版 PyTorch CUDA 12.8，CPU 版保留为 `requirements-cpu.txt`。
+- `[未实现]` 结果管理/训练评估平台显式选择 DQN `_best.pt` checkpoint 作为评估、合并或发布来源。
+- `[未实现]` 未完成 DQN 训练续训时优先读取 `_checkpoint.pt` 滚动断点，找不到时再回退到主模型。
 - `[未实现]` `players/ppo_player.py`。
 - `[未实现]` `models/ppo_network.py`。
 - `[已实现]` 棋盘 `log2(tile)` 特征编码，当前用于线性 Q 模型。

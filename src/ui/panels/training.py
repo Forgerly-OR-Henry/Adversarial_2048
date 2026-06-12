@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 from tkinter import ttk
 
-from domain.train import train_dqn_enemy, train_dqn_player, train_q_enemy, train_q_player
 from domain.train.artifacts import (
     TRAINING_STATUS_INCOMPLETE,
     resolve_info_path,
@@ -23,7 +22,8 @@ from ui.components import (
     create_text_entry,
     set_button_visual,
 )
-from ui.panels.shared import create_field_label, display_timestamp, make_grid_placer, unique_label
+from ui.panels.shared import create_field_label, make_grid_placer
+from ui.panels.training_options import reference_option_map, resume_option_map
 from ui.settings.layout.grid import create_area_panel
 from ui.settings.options import (
     ENEMY_LABELS,
@@ -36,17 +36,21 @@ from ui.settings.options import (
     REFERENCE_TYPES_BY_LABEL,
     TRAINING_ALGORITHM_LABELS,
     TRAINING_TARGET_LABELS,
-    TRAINING_TYPE_LABELS,
 )
 from ui.settings.theme import BUTTON_BUSY, BUTTON_NORMAL
 from workflows.training import (
-    build_training_reference_options,
-    build_training_resume_options,
     default_enemy_type_for_algorithm,
     default_player_type_for_algorithm,
     default_training_output_directory,
-    REFERENCE_TYPE_INITIAL_WEIGHTS,
+    parse_training_episodes,
+    parse_training_seed,
+    run_training_request,
+    TrainingProgress,
+    TrainingRunRequest,
+    training_request_log_parameters,
     training_output_model_path,
+    validate_reference_type,
+    validate_resume_episodes,
 )
 from utils.training_log import log_error
 
@@ -226,49 +230,15 @@ class TrainingPanel:
             self.stop()
             return
 
-        episodes_text = self.episodes.get().strip()
-        if episodes_text:
-            try:
-                episodes: int | None = int(episodes_text)
-            except (TypeError, ValueError, tk.TclError):
-                self.status.set("训练局数必须是正整数，或留空表示无限训练。")
-                return
-            if episodes < 1:
-                self.status.set("训练局数至少为 1，或留空表示无限训练。")
-                return
-        else:
-            episodes = None
-
-        seed_text = self.seed.get().strip()
-        if seed_text:
-            try:
-                seed: int | None = int(seed_text)
-            except ValueError:
-                self.status.set("随机种子必须留空或填写整数。")
-                return
-        else:
-            seed = None
-
         try:
+            episodes = parse_training_episodes(self.episodes.get())
+            seed = parse_training_seed(self.seed.get())
             output_path = training_output_model_path(self._config_key(), self.output.get())
+            validate_reference_type(self._selected_reference_type())
+            validate_resume_episodes(episodes, self._selected_resume_artifact())
         except ValueError as exc:
             self.status.set(str(exc))
             return
-        output = str(output_path)
-        reference_type = self._selected_reference_type()
-        if reference_type != REFERENCE_TYPE_INITIAL_WEIGHTS:
-            self.status.set("当前仅支持使用参考模型作为起始权重。")
-            return
-        reference_model_path = self._selected_reference_path()
-        resume_artifact = self._selected_resume_artifact()
-        resume_run_path = self._selected_resume_run_path()
-        if resume_artifact is not None:
-            completed = int(resume_artifact.get("completed_episodes") or 0)
-            if episodes is not None and episodes < completed:
-                self.status.set(f"继续训练总局数不能低于当前已训练局数 {completed}。")
-                return
-        enemy_type = ENEMY_TYPES_BY_LABEL[self.enemy_type.get()]
-        player_type = PLAYER_TYPES_BY_LABEL[self.player_type.get()]
 
         self.running = True
         self.stop_event = threading.Event()
@@ -283,23 +253,24 @@ class TrainingPanel:
         self._refresh_button()
         self.status.set("正在无限训练，手动停止后会保存为已完成结果。" if episodes is None else f"正在训练 {episodes} 局...")
         self.latest_preview = None
+        request = TrainingRunRequest(
+            target=self._target_key(),
+            algorithm=self._algorithm_key(),
+            enemy_type=ENEMY_TYPES_BY_LABEL[self.enemy_type.get()],
+            player_type=PLAYER_TYPES_BY_LABEL[self.player_type.get()],
+            episodes=episodes,
+            seed=seed,
+            output=str(output_path),
+            reference_model_path=self._selected_reference_path(),
+            resume_run_path=self._selected_resume_run_path(),
+            stop_event=self.stop_event,
+        )
 
         # 训练可能很慢，放入 daemon 线程；界面通过队列接收进度和最终摘要。
         # Training can be slow, so it runs in a daemon thread while the UI receives queued progress.
         worker = threading.Thread(
             target=self._worker,
-            args=(
-                self.target.get(),
-                self.algorithm.get(),
-                enemy_type,
-                player_type,
-                episodes,
-                seed,
-                output,
-                reference_model_path,
-                resume_run_path,
-                self.stop_event,
-            ),
+            args=(request,),
             daemon=True,
         )
         worker.start()
@@ -320,141 +291,22 @@ class TrainingPanel:
 
     def _worker(
         self,
-        target: str,
-        algorithm: str,
-        enemy_type: str,
-        player_type: str,
-        episodes: int | None,
-        seed: int | None,
-        output: str | None,
-        reference_model_path: Path | None,
-        resume_run_path: Path | None,
-        stop_event: threading.Event | None,
+        request: TrainingRunRequest,
     ) -> None:
         try:
-            if target == "敌对 AI" and algorithm == "深度 DQN":
-                summary = train_dqn_enemy(
-                    episodes=episodes,
-                    player_type=player_type,
-                    seed=seed,
-                    output=output,
-                    reference_model_path=reference_model_path,
-                    resume_run_path=resume_run_path,
-                    stop_event=stop_event,
-                    progress_callback=lambda current, total, state, epsilon, device: self.queue.put(
-                        (
-                            "progress",
-                            (
-                                target,
-                                current,
-                                total,
-                                state.max_tile,
-                                state.score,
-                                epsilon,
-                                device,
-                                [row[:] for row in state.board],
-                                state.steps,
-                            ),
-                        )
-                    ),
-                )
-            elif target == "敌对 AI":
-                summary = train_q_enemy(
-                    episodes=episodes,
-                    player_type=player_type,
-                    seed=seed,
-                    output=output,
-                    reference_model_path=reference_model_path,
-                    resume_run_path=resume_run_path,
-                    stop_event=stop_event,
-                    progress_callback=lambda current, total, state, epsilon: self.queue.put(
-                        (
-                            "progress",
-                            (
-                                target,
-                                current,
-                                total,
-                                state.max_tile,
-                                state.score,
-                                epsilon,
-                                "cpu",
-                                [row[:] for row in state.board],
-                                state.steps,
-                            ),
-                        )
-                    ),
-                )
-            elif algorithm == "深度 DQN":
-                summary = train_dqn_player(
-                    episodes=episodes,
-                    enemy_type=enemy_type,
-                    seed=seed,
-                    output=output,
-                    reference_model_path=reference_model_path,
-                    resume_run_path=resume_run_path,
-                    stop_event=stop_event,
-                    progress_callback=lambda current, total, state, epsilon, device: self.queue.put(
-                        (
-                            "progress",
-                            (
-                                target,
-                                current,
-                                total,
-                                state.max_tile,
-                                state.score,
-                                epsilon,
-                                device,
-                                [row[:] for row in state.board],
-                                state.steps,
-                            ),
-                        )
-                    ),
-                )
-            else:
-                summary = train_q_player(
-                    episodes=episodes,
-                    enemy_type=enemy_type,
-                    seed=seed,
-                    output=output,
-                    reference_model_path=reference_model_path,
-                    resume_run_path=resume_run_path,
-                    stop_event=stop_event,
-                    progress_callback=lambda current, total, state, epsilon: self.queue.put(
-                        (
-                            "progress",
-                            (
-                                target,
-                                current,
-                                total,
-                                state.max_tile,
-                                state.score,
-                                epsilon,
-                                "cpu",
-                                [row[:] for row in state.board],
-                                state.steps,
-                            ),
-                        )
-                    ),
-                )
+            summary = run_training_request(
+                request,
+                progress_callback=lambda progress: self.queue.put(("progress", progress)),
+            )
         except Exception as exc:  # pragma: no cover - surfaced through the GUI.
             log_error(
                 "gui_training_worker",
                 exc,
-                {
-                    "target": target,
-                    "algorithm": algorithm,
-                    "enemy_type": enemy_type,
-                    "player_type": player_type,
-                    "episodes": episodes,
-                    "seed": seed,
-                    "output": output,
-                    "reference_model_path": reference_model_path,
-                    "resume_run_path": resume_run_path,
-                },
+                training_request_log_parameters(request),
             )
             self.queue.put(("error", str(exc)))
             return
-        self.queue.put(("done", (target, summary)))
+        self.queue.put(("done", (request.target, summary)))
 
     def _poll_queue(self) -> None:
         while True:
@@ -464,16 +316,21 @@ class TrainingPanel:
                 break
 
             if event == "progress":
-                target, current, total, max_tile, score, epsilon, device, board, steps = payload
-                self.latest_preview = (board, score, steps, max_tile)
-                if total is None:
+                progress = payload
+                if not isinstance(progress, TrainingProgress):
+                    continue
+                target_label = TRAINING_TARGET_LABELS[progress.target]
+                self.latest_preview = (progress.board, progress.score, progress.steps, progress.max_tile)
+                if progress.total is None:
                     self.status.set(
-                        f"{target} 第 {current} 局 | 无限训练 | 玩家最大块 {max_tile} | 玩家分数 {score} | 探索率 {epsilon:.2f} | 设备 {device}"
+                        f"{target_label} 第 {progress.current} 局 | 无限训练 | 玩家最大块 {progress.max_tile} | "
+                        f"玩家分数 {progress.score} | 探索率 {progress.epsilon:.2f} | 设备 {progress.device}"
                     )
                 else:
-                    self.progress.set(int(current * 100 / total))
+                    self.progress.set(int(progress.current * 100 / progress.total))
                     self.status.set(
-                        f"{target} {current}/{total} | 玩家最大块 {max_tile} | 玩家分数 {score} | 探索率 {epsilon:.2f} | 设备 {device}"
+                        f"{target_label} {progress.current}/{progress.total} | 玩家最大块 {progress.max_tile} | "
+                        f"玩家分数 {progress.score} | 探索率 {progress.epsilon:.2f} | 设备 {progress.device}"
                     )
             elif event == "done":
                 target, summary = payload
@@ -498,7 +355,7 @@ class TrainingPanel:
                     self.status.set(
                         f"训练已停止，进度 {summary.completed_episodes}/{summary.target_episodes} 已保存到 {summary.output_path}"
                     )
-                elif target == "敌对 AI":
+                elif target == "enemy":
                     self.status.set(
                         f"敌对模型已保存到 {summary.output_path} | 玩家平均最大块 {summary.average_player_max_tile:.1f} | 最好压制 {summary.best_suppressed_max_tile}"
                     )
@@ -547,13 +404,13 @@ class TrainingPanel:
         previous_reference = self._selected_reference_path()
         previous_resume = self.resume_run.get()
 
-        self.reference_options = _reference_option_map(training_type)
+        self.reference_options = reference_option_map(training_type)
         if previous_reference is not None and not self._select_reference_path(previous_reference):
             self.reference_model.set(NO_REFERENCE_LABEL)
         elif previous_reference is None and self.reference_model.get() not in self.reference_options:
             self.reference_model.set(NO_REFERENCE_LABEL)
 
-        self.resume_options = _resume_option_map(training_type)
+        self.resume_options = resume_option_map(training_type)
         if previous_resume not in self.resume_options:
             self.resume_run.set(NO_RESUME_LABEL)
 
@@ -654,8 +511,10 @@ class TrainingPanel:
         return default_player_type_for_algorithm(self._algorithm_key())
 
     def _config_key(self) -> str:
-        target = "enemy" if self.target.get() == "敌对 AI" else "player"
-        return f"{target}_{self._algorithm_key()}"
+        return f"{self._target_key()}_{self._algorithm_key()}"
+
+    def _target_key(self) -> str:
+        return "enemy" if self.target.get() == "敌对 AI" else "player"
 
     def _algorithm_key(self) -> str:
         return "dqn" if self.algorithm.get() == "深度 DQN" else "q"
@@ -664,33 +523,6 @@ class TrainingPanel:
 def build_training_panel(app: Any, parent: ttk.Frame) -> TrainingPanel:
     """创建模型训练面板。 / Build the model training panel."""
     return TrainingPanel(app, parent, app.ui_defaults["training"])
-
-
-def _reference_option_map(training_type: str) -> dict[str, Path | None]:
-    options: dict[str, Path | None] = {NO_REFERENCE_LABEL: None}
-    for option in build_training_reference_options(training_type):
-        suffix = "latest" if option.status == "latest" else display_timestamp(option.created_at)
-        label = unique_label(
-            options,
-            f"{TRAINING_TYPE_LABELS.get(option.training_type, option.training_type)} | {suffix}",
-        )
-        options[label] = option.path
-    return options
-
-
-def _resume_option_map(training_type: str) -> dict[str, dict[str, Any] | None]:
-    options: dict[str, dict[str, Any] | None] = {NO_RESUME_LABEL: None}
-    for option in build_training_resume_options(training_type):
-        label = unique_label(
-            options,
-            (
-                f"{TRAINING_TYPE_LABELS.get(option.training_type, option.training_type)} | "
-                f"未完成 {option.completed_episodes}/{option.target_episodes} | "
-                f"{display_timestamp(option.created_at)}"
-            ),
-        )
-        options[label] = option.artifact
-    return options
 
 
 __all__ = ["TrainingPanel", "build_training_panel"]

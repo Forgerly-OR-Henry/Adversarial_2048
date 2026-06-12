@@ -118,6 +118,8 @@ player_dqn_model_best.pt
 player_dqn_model_checkpoint.pt
 ```
 
+当前自动流程仍以主模型 `player_dqn_model.pt` / `enemy_dqn_model.pt` 为准；GUI、评估、结果管理、设为 `latest` 和续训默认不会自动选择 `_best.pt` 或 `_checkpoint.pt`。后续可补充的未实现功能包括：在结果管理/训练评估平台中显式选择 best checkpoint，以及未完成训练续训时优先使用滚动 checkpoint。
+
 训练不会自动写入 `latest/`；需要把某个历史训练成果设为默认模型时，在结果管理中选择该训练结果并点击 `设为 latest`。继续训练只接受同类型未完成训练目录。新的继续训练保存成功后，会删除旧的未完成目录；完整参考模型只作为初始化权重来源，不会被自动删除。
 
 ## PyTorch / GPU
